@@ -162,4 +162,28 @@ Verify it with:
 dotnet sln LaundryOperations.sln list
 ```
 
-The next checkpoint will add the first application project rather than creating every planned component at once.
+## Cloud API health check
+
+`apps/cloud/Laundry.Api` is the first runnable application. At this checkpoint it exposes only `GET /health`; no business or database behavior has been added.
+
+Restore packages, build the complete solution, and run all tests:
+
+```powershell
+dotnet restore LaundryOperations.sln
+dotnet build LaundryOperations.sln --no-restore
+dotnet test LaundryOperations.sln --no-build
+```
+
+Start the API:
+
+```powershell
+dotnet run --project apps/cloud/Laundry.Api
+```
+
+While it is running, open `http://localhost:5100/health` in a browser or check it from another PowerShell window:
+
+```powershell
+Invoke-RestMethod http://localhost:5100/health
+```
+
+The response should be `Healthy`. Return to the API terminal and press **Ctrl+C** to stop it. PostgreSQL does not need to be running for this basic process health check.

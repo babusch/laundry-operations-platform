@@ -6,9 +6,9 @@ Last updated: 2026-09-03
 
 **Phase 0 — discovery and risk validation**
 
-Application code has not been scaffolded. The architecture and delivery order are documented, but real workflows, hardware, and deployment constraints still need validation.
+Initial application scaffolding has begun. The architecture and delivery order are documented, but real workflows, hardware, and deployment constraints still need validation.
 
-The Windows development toolchain has been verified. Repository-level .NET, Node.js, and pnpm versions, the pnpm workspace, formatting rules, and ignore rules are now in place. The root .NET solution and a verified local PostgreSQL Docker Compose service are also established; application projects have not yet been scaffolded.
+The Windows development toolchain has been verified. Repository-level .NET, Node.js, and pnpm versions, the pnpm workspace, formatting rules, and ignore rules are now in place. The root .NET solution, local PostgreSQL Docker Compose service, and first cloud API health endpoint with an integration test are established.
 
 ## Next outcome
 
