@@ -12,9 +12,18 @@ Build a reliable industrial laundry operations platform. Correctness, traceabili
    - Components, boundaries, or technology: `docs/ARCHITECTURE.md`
    - Offline behavior, plant gateway, or synchronization: `docs/OFFLINE_AND_SYNC.md`
    - Entities, terminology, or business events: `docs/DOMAIN.md`
+   - User interface design or review: `docs/UI_DESIGN.md`
    - Milestone selection or sequencing: `docs/ROADMAP.md`
    - Repository placement: `docs/REPOSITORY_STRUCTURE.md`
 3. Check `docs/decisions/` before revisiting an architectural choice.
+
+## Required UI design skill
+
+- For every task that creates, changes, prototypes, or reviews a user-facing interface, read and apply `.agents/skills/apple-design/SKILL.md` before planning or implementation.
+- Treat that skill as interaction and design-foundation guidance, not an instruction to imitate macOS or iOS visually.
+- Apply `docs/UI_DESIGN.md` alongside the skill. Industrial safety, clarity, accessibility, scan feedback, and offline-state visibility override decorative effects.
+- UI work is not complete until it has been reviewed against the skill's response, interruptibility, spatial consistency, typography, accessibility, and reduced-motion guidance.
+- If the skill cannot be read, report that limitation before making UI design decisions.
 
 ## Non-negotiable system invariants
 
@@ -60,4 +69,3 @@ Build a reliable industrial laundry operations platform. Correctness, traceabili
 ## Nested instructions
 
 Add a focused `AGENTS.md` inside an application only when that area has commands or constraints not shared by the rest of the repository. Keep root guidance authoritative and avoid copying it into nested files.
-

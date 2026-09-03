@@ -19,6 +19,7 @@ Start here:
 - [Architecture](docs/ARCHITECTURE.md)
 - [Offline and synchronization design](docs/OFFLINE_AND_SYNC.md)
 - [Domain model](docs/DOMAIN.md)
+- [UI design](docs/UI_DESIGN.md)
 - [Delivery roadmap](docs/ROADMAP.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)
 - [Architecture decisions](docs/decisions/README.md)
@@ -36,4 +37,4 @@ Start here:
 
 ## For AI agents
 
-Read [AGENTS.md](AGENTS.md) before changing the repository. It contains the working agreement and directs agents to the relevant canonical documents. Do not treat chat history as the source of truth once a decision is recorded here.
+Read [AGENTS.md](AGENTS.md) before changing the repository. It contains the working agreement and directs agents to the relevant canonical documents. UI work additionally requires the repository's `apple-design` skill. Do not treat chat history as the source of truth once a decision is recorded here.

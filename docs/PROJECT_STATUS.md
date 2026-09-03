@@ -31,8 +31,8 @@ Before that implementation begins, confirm:
 - Plant: local .NET gateway and local PostgreSQL.
 - Integration: keyboard-wedge scanners may feed the PWA; fixed RFID and industrial devices connect through the gateway.
 - Synchronization: append-only, versioned, idempotent events with outbox/inbox processing.
+- UI design: all user-facing design and review work follows the repository `apple-design` skill together with `docs/UI_DESIGN.md`.
 
 ## Update rules
 
 Update this file when the active phase, next outcome, significant blocker, or architectural baseline changes. Do not use it as a historical log; permanent reasoning belongs in an ADR.
-
