@@ -14,6 +14,7 @@ The project is in **discovery and architecture validation**. This repository see
 
 Start here:
 
+- [Development setup](docs/DEVELOPMENT_SETUP.md)
 - [Project status](docs/PROJECT_STATUS.md)
 - [Product and scope](docs/PRODUCT.md)
 - [Architecture](docs/ARCHITECTURE.md)

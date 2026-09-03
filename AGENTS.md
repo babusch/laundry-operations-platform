@@ -13,6 +13,7 @@ Build a reliable industrial laundry operations platform. Correctness, traceabili
    - Offline behavior, plant gateway, or synchronization: `docs/OFFLINE_AND_SYNC.md`
    - Entities, terminology, or business events: `docs/DOMAIN.md`
    - User interface design or review: `docs/UI_DESIGN.md`
+   - Local prerequisites or development commands: `docs/DEVELOPMENT_SETUP.md`
    - Milestone selection or sequencing: `docs/ROADMAP.md`
    - Repository placement: `docs/REPOSITORY_STRUCTURE.md`
 3. Check `docs/decisions/` before revisiting an architectural choice.

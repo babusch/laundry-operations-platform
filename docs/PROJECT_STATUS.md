@@ -8,6 +8,8 @@ Last updated: 2026-09-03
 
 Application code has not been scaffolded. The architecture and delivery order are documented, but real workflows, hardware, and deployment constraints still need validation.
 
+The Windows development toolchain has been verified. Repository-level .NET, Node.js, and pnpm versions, the pnpm workspace, formatting rules, and ignore rules are now in place.
+
 ## Next outcome
 
 Produce an executable walking skeleton in which a simulated scan travels through the operator application and local gateway to the cloud API and becomes visible in an audit view.

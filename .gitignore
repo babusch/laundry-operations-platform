@@ -1,0 +1,48 @@
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Operating systems and editors
+.DS_Store
+Thumbs.db
+.idea/
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET
+**/bin/
+**/obj/
+**/TestResults/
+*.nupkg
+*.snupkg
+coverage/
+coverage.*
+
+# Node.js and frontend builds
+node_modules/
+.pnpm-store/
+.next/
+.turbo/
+dist/
+out/
+*.tsbuildinfo
+
+# Test and tool output
+artifacts/
+playwright-report/
+test-results/
+*.log
+
+# Local infrastructure data
+.docker/
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Device captures can contain operational or customer data
+device-captures/
