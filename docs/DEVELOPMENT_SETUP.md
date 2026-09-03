@@ -111,3 +111,55 @@ docker run --rm hello-world
 The toolchain was verified on 2026-09-03 with Git 2.55.0.windows.5, .NET SDK 10.0.400, Node.js 24.20.0, Docker Desktop 4.89.0, Docker Engine 29.7.2, and Docker Compose 5.5.0. Docker also completed the `hello-world` container test.
 
 The repository now pins its language toolchain and defines its workspace and cross-platform file conventions. The next small checkpoint can create the empty .NET solution and Docker Compose configuration before any application projects are scaffolded.
+
+## Local PostgreSQL
+
+The root `docker-compose.yml` defines one PostgreSQL development service. It uses a named Docker volume, so the database remains intact when its container is stopped or replaced. PostgreSQL listens on `localhost:5432` by default.
+
+The checked-in values are deliberately local-development credentials. To override them, copy `.env.example` to `.env` and edit that untracked file. Never reuse these values outside local development.
+
+Validate the resolved configuration without starting anything:
+
+```powershell
+docker compose config
+```
+
+Start PostgreSQL and wait for its health check:
+
+```powershell
+docker compose up --detach --wait
+```
+
+Inspect the running services:
+
+```powershell
+docker compose ps
+```
+
+Open a PostgreSQL prompt inside the container:
+
+```powershell
+docker compose exec postgres psql --username laundry --dbname laundry
+```
+
+Enter `\q` to leave `psql`. To inspect problems, run `docker compose logs postgres`.
+
+Stop the service while retaining its data:
+
+```powershell
+docker compose down
+```
+
+`docker compose down --volumes` also deletes the local database volume and all data in it. Use that destructive variant only when intentionally resetting the development database.
+
+## Empty .NET solution
+
+`LaundryOperations.sln` is the root solution that will contain the cloud API, background worker, edge gateway, and their .NET tests. It is intentionally empty at this checkpoint.
+
+Verify it with:
+
+```powershell
+dotnet sln LaundryOperations.sln list
+```
+
+The next checkpoint will add the first application project rather than creating every planned component at once.

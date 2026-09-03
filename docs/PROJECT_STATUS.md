@@ -8,7 +8,7 @@ Last updated: 2026-09-03
 
 Application code has not been scaffolded. The architecture and delivery order are documented, but real workflows, hardware, and deployment constraints still need validation.
 
-The Windows development toolchain has been verified. Repository-level .NET, Node.js, and pnpm versions, the pnpm workspace, formatting rules, and ignore rules are now in place.
+The Windows development toolchain has been verified. Repository-level .NET, Node.js, and pnpm versions, the pnpm workspace, formatting rules, and ignore rules are now in place. The root .NET solution and a verified local PostgreSQL Docker Compose service are also established; application projects have not yet been scaffolded.
 
 ## Next outcome
 
