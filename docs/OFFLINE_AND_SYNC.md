@@ -33,6 +33,8 @@ causation_id             When one operation caused another
 payload
 ```
 
+JSON contracts use camelCase field names. The first concrete contract is `packages/contracts/events/scan-observed.v1.schema.json`; it represents a raw observation, so operator, aggregate, causation, and resolved item fields are not applicable until later processing supplies that context.
+
 ## Delivery rules
 
 - Assume at-least-once delivery, not exactly-once transport.
@@ -81,4 +83,3 @@ Use scoped incremental synchronization and tombstones for removals. Avoid copyin
 - RFID reader generates a high-volume duplicate-read storm.
 - Cloud and gateway run adjacent supported versions.
 - Quarantined events are diagnosed and safely replayed.
-

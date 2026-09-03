@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:laundry-operations-platform:events:scan-observed:v1",
+  "title": "Scan observed event v1",
+  "description": "An immutable barcode or RFID observation accepted by a plant gateway.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "eventType",
+    "correlationId",
+    "tenantId",
+    "plantId",
+    "stationId",
+    "deviceId",
+    "observedAtUtc",
+    "gatewayAcceptedAtUtc",
+    "identifier"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "The payload schema version.",
+      "const": 1
+    },
+    "eventId": {
+      "description": "A globally unique event identifier generated at the origin and retained across retries.",
+      "$ref": "#/$defs/uuid"
+    },
+    "eventType": {
+      "description": "The stable event name.",
+      "const": "scan.observed"
+    },
+    "correlationId": {
+      "description": "Connects this observation to logs and events in the same operation.",
+      "$ref": "#/$defs/uuid"
+    },
+    "tenantId": {
+      "description": "The platform tenant that owns the plant.",
+      "$ref": "#/$defs/uuid"
+    },
+    "plantId": {
+      "description": "The plant where the observation occurred.",
+      "$ref": "#/$defs/uuid"
+    },
+    "stationId": {
+      "description": "The logical operator station or fixed-reader zone.",
+      "$ref": "#/$defs/uuid"
+    },
+    "deviceId": {
+      "description": "The scanner, reader, or simulator that produced the observation.",
+      "$ref": "#/$defs/uuid"
+    },
+    "observedAtUtc": {
+      "description": "The source device's UTC timestamp.",
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "gatewayAcceptedAtUtc": {
+      "description": "The gateway's UTC timestamp after durable local acceptance.",
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "identifier": {
+      "description": "The external identifier observed by the device. It need not resolve to a known item.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "technology",
+        "value"
+      ],
+      "properties": {
+        "technology": {
+          "description": "The technology used to read the identifier.",
+          "enum": [
+            "barcode",
+            "rfid"
+          ]
+        },
+        "value": {
+          "description": "The identifier exactly as normalized by the producing adapter.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    }
+  }
+}

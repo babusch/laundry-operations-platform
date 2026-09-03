@@ -187,3 +187,14 @@ Invoke-RestMethod http://localhost:5100/health
 ```
 
 The response should be `Healthy`. Return to the API terminal and press **Ctrl+C** to stop it. PostgreSQL does not need to be running for this basic process health check.
+
+## Contract validation
+
+The language-neutral event contracts under `packages/contracts` are validated with Node.js tests. Install the pinned workspace dependencies and run the contract suite:
+
+```powershell
+corepack pnpm install
+corepack pnpm test:contracts
+```
+
+The first install creates or updates `pnpm-lock.yaml`. Commit that lockfile so every environment resolves the same dependency versions.
