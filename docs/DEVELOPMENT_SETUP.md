@@ -110,11 +110,11 @@ docker run --rm hello-world
 
 The toolchain was verified on 2026-09-03 with Git 2.55.0.windows.5, .NET SDK 10.0.400, Node.js 24.20.0, Docker Desktop 4.89.0, Docker Engine 29.7.2, and Docker Compose 5.5.0. Docker also completed the `hello-world` container test.
 
-The repository now pins its language toolchain and defines its workspace and cross-platform file conventions. The next small checkpoint can create the empty .NET solution and Docker Compose configuration before any application projects are scaffolded.
+The repository pins its language toolchain and defines its workspace and cross-platform file conventions. The .NET solution and Docker Compose configuration are now in place.
 
 ## Local PostgreSQL
 
-The root `docker-compose.yml` defines one PostgreSQL development service. It uses a named Docker volume, so the database remains intact when its container is stopped or replaced. PostgreSQL listens on `localhost:5432` by default.
+The root `docker-compose.yml` defines one PostgreSQL development service. It uses a named Docker volume, so the database remains intact when its container is stopped or replaced. Its published port is bound to `127.0.0.1:15432` on this computer. PostgreSQL still uses port 5432 inside its container; port 15432 avoids a conflict with an existing Windows PostgreSQL service.
 
 The checked-in values are deliberately local-development credentials. To override them, copy `.env.example` to `.env` and edit that untracked file. Never reuse these values outside local development.
 
@@ -152,9 +152,9 @@ docker compose down
 
 `docker compose down --volumes` also deletes the local database volume and all data in it. Use that destructive variant only when intentionally resetting the development database.
 
-## Empty .NET solution
+## .NET solution
 
-`LaundryOperations.sln` is the root solution that will contain the cloud API, background worker, edge gateway, and their .NET tests. It is intentionally empty at this checkpoint.
+`LaundryOperations.sln` groups the cloud API and its tests. The background worker and edge gateway will be added as their checkpoints begin.
 
 Verify it with:
 
@@ -164,7 +164,7 @@ dotnet sln LaundryOperations.sln list
 
 ## Cloud API health check
 
-`apps/cloud/Laundry.Api` is the first runnable application. At this checkpoint it exposes only `GET /health`; no business or database behavior has been added.
+`apps/cloud/Laundry.Api` is the first runnable application. It exposes `GET /health` for process health and `GET /health/ready` for PostgreSQL connectivity. Scan ingestion has not yet been added.
 
 Restore packages, build the complete solution, and run all tests:
 
@@ -187,6 +187,76 @@ Invoke-RestMethod http://localhost:5100/health
 ```
 
 The response should be `Healthy`. Return to the API terminal and press **Ctrl+C** to stop it. PostgreSQL does not need to be running for this basic process health check.
+
+## Connect the API to PostgreSQL
+
+Run these commands from the repository root with Docker Desktop running:
+
+```powershell
+docker compose up --detach --wait
+dotnet tool restore
+dotnet restore LaundryOperations.sln
+dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
+dotnet run --project apps/cloud/Laundry.Api
+```
+
+The commands perform these steps:
+
+1. Start PostgreSQL in Docker and wait until it accepts connections.
+2. Install the repository-pinned `dotnet-ef` tool, used to manage database migrations.
+3. Download the .NET packages, including EF Core and the Npgsql PostgreSQL provider.
+4. Apply pending migrations to the local database. A migration is a version-controlled description of a database structure change. EF records applied migrations in its history table, so repeating this command preserves existing data and applies only pending changes.
+5. Start the API on this computer at `http://localhost:5100`.
+
+The API's Development configuration contains a connection string matching the Compose defaults:
+
+| Setting | Local default | Meaning |
+|---|---|---|
+| Host | localhost | PostgreSQL is reached through this computer |
+| Port | 15432 | The port Docker publishes on this computer |
+| Database | laundry | The database inside PostgreSQL |
+| Username | laundry | The local development database user |
+| Password | laundry_local_dev_only | Disposable development credential |
+
+These defaults exist only in `appsettings.Development.json`. Other environments must supply `ConnectionStrings__Laundry` through deployment configuration. EF uses Npgsql to connect to PostgreSQL; no PostgreSQL installation on Windows is needed.
+
+Compose reads `.env`, but ASP.NET Core does not read that file automatically. If you change the Compose database settings, provide a matching API connection string through `ConnectionStrings__Laundry` in the same terminal before running migrations or the API. Changing Compose's initialization credentials does not change users/passwords in an existing volume.
+
+In a second terminal, verify the API can reach the database:
+
+```powershell
+Invoke-RestMethod http://localhost:5100/health/ready
+```
+
+Expect `Healthy`. If PostgreSQL stops, readiness returns HTTP 503 (`Unhealthy`) while `/health` still returns HTTP 200. Readiness currently checks connectivity only; it does not prove migrations are current.
+
+Inspect the new table using PostgreSQL's command-line client inside Docker:
+
+```powershell
+docker compose exec postgres psql --username laundry --dbname laundry --command '\d integrations.scan_observations'
+```
+
+`integrations.scan_observations` stores the agreed observation fields and a separate cloud receipt timestamp. The nested identifier becomes two columns. The primary key on `event_id` prevents duplicate inserts, including simultaneous attempts. This is the storage foundation; the next checkpoint will implement validation and retry responses at the HTTP boundary.
+
+Migrations are applied explicitly, never automatically at API startup. Future model changes get a new migration rather than edits to an already-applied migration. See Microsoft's [migration guidance](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying).
+
+## Database tests
+
+With Docker Desktop running:
+
+```powershell
+dotnet test LaundryOperations.sln
+```
+
+The database tests create isolated PostgreSQL containers with random host ports, apply the real migrations, and remove those temporary containers after testing. They do not use or erase your Compose database. They test barcode/RFID storage, sequential and simultaneous duplicates, delayed observations, wrong source clocks, migration reapplication, and database outage/recovery.
+
+To run only tests that do not need Docker:
+
+```powershell
+dotnet test LaundryOperations.sln --filter "Category!=Database"
+```
+
+Stop the API with **Ctrl+C**, and stop the development database with `docker compose stop` when finished. Its named volume keeps your data.
 
 ## Contract validation
 
