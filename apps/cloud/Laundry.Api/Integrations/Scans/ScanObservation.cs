@@ -16,4 +16,5 @@ public sealed record ScanObservation
     public required DateTimeOffset CloudReceivedAtUtc { get; init; }
     public required string IdentifierTechnology { get; init; }
     public required string IdentifierValue { get; init; }
+    public string? PayloadJson { get; init; }
 }

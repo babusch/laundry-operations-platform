@@ -10,7 +10,7 @@ Provide reliable, traceable workflows from collection and receiving through prod
 
 ## Current status
 
-The project is in **discovery and architecture validation**. This repository seed contains the agreed baseline and the order in which the system should be built. Application code has not been scaffolded yet.
+The project is in **discovery and architecture validation**. The first runnable API, PostgreSQL migrations, scan contract, and local development scan ingestion endpoint are implemented. See the project status and development guide for current limits and commands.
 
 Start here:
 

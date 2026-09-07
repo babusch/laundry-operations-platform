@@ -164,7 +164,7 @@ dotnet sln LaundryOperations.sln list
 
 ## Cloud API health check
 
-`apps/cloud/Laundry.Api` is the first runnable application. It exposes `GET /health` for process health and `GET /health/ready` for PostgreSQL connectivity. Scan ingestion has not yet been added.
+`apps/cloud/Laundry.Api` exposes `GET /health` for process health, `GET /health/ready` for PostgreSQL connectivity, and `POST /api/scans` for local development scan ingestion.
 
 Restore packages, build the complete solution, and run all tests:
 
@@ -236,7 +236,7 @@ Inspect the new table using PostgreSQL's command-line client inside Docker:
 docker compose exec postgres psql --username laundry --dbname laundry --command '\d integrations.scan_observations'
 ```
 
-`integrations.scan_observations` stores the agreed observation fields and a separate cloud receipt timestamp. The nested identifier becomes two columns. The primary key on `event_id` prevents duplicate inserts, including simultaneous attempts. This is the storage foundation; the next checkpoint will implement validation and retry responses at the HTTP boundary.
+`integrations.scan_observations` stores the agreed observation fields and a separate cloud receipt timestamp. The nested identifier becomes two columns. The primary key on `event_id` prevents duplicate inserts, including simultaneous attempts. The `PreserveScanPayload` migration adds the original JSON for exact retry comparison without losing timestamp precision.
 
 Migrations are applied explicitly, never automatically at API startup. Future model changes get a new migration rather than edits to an already-applied migration. See Microsoft's [migration guidance](https://learn.microsoft.com/en-us/ef/core/managing-schemas/migrations/applying).
 
@@ -257,6 +257,57 @@ dotnet test LaundryOperations.sln --filter "Category!=Database"
 ```
 
 Stop the API with **Ctrl+C**, and stop the development database with `docker compose stop` when finished. Its named volume keeps your data.
+
+## Repository-local .NET tools
+
+`.config/dotnet-tools.json` is a tool manifest: a list of command-line tools and the exact versions this repository uses. The directory holds configuration, not the installed tool binaries or database files.
+
+- `dotnet-ef` at version `10.0.11` manages EF Core migrations.
+- `commands` lists the command exposed by the installed tool.
+- The outer `version: 1` is the manifest format version, not a .NET version.
+- `isRoot: true` ends the tool-manifest search here instead of looking in parent folders.
+- `rollForward: false` leaves runtime roll-forward for the tool disabled; it is distinct from the pinned tool package version.
+
+Run `dotnet tool restore` after cloning the repository or when its tool versions change. Then `dotnet ef` uses the repository's tool. Commit the manifest so teammates and CI can restore the same version.
+
+`global.json` selects the .NET SDK that builds the code. The `.csproj` files list application and test dependencies. The tool manifest separately selects development commands such as the migration tool.
+
+## Submit a simulated scan
+
+With Docker running, apply pending migrations before starting the API:
+
+```powershell
+dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
+dotnet run --project apps/cloud/Laundry.Api
+```
+
+In another terminal at the repository root:
+
+```powershell
+$scanJson = Get-Content packages/contracts/examples/scan-observed.v1.barcode.json -Raw
+Invoke-RestMethod -Method Post -Uri http://localhost:5100/api/scans -ContentType application/json -Body $scanJson
+```
+
+The response contains `eventId`, `status`, and `cloudReceivedAtUtc`. Repeat the same command to see `alreadyProcessed`. The cloud receipt timestamp remains unchanged.
+
+| HTTP status | Meaning |
+|---|---|
+| 201 | A new observation was durably stored; status is `accepted` |
+| 200 | The same ID and payload were already stored; status is `alreadyProcessed` |
+| 400 | Invalid JSON, contract violation, or unsupported storage representation |
+| 403 | Request is not local or its tenant/plant differs from server configuration |
+| 409 | ID conflicts with an existing observation; nothing is overwritten |
+| 413 | Body exceeds 16 KiB |
+| 415 | Body is not JSON |
+| 503 | Storage unavailable; retain the event and retry unchanged (`Retry-After: 5`) |
+
+The route is enabled only in Development with `ScanIngestion:Enabled`. Its server-configured tenant and plant match the synthetic examples. It accepts loopback connections only; it is not a production authentication mechanism. In Staging and Production the route returns 404 even if the configuration flag is set.
+
+UUIDs and timestamps are checked against the embedded JSON Schema. Unknown item identifiers are accepted without item resolution. The accepted payload is immutable: changing any field while reusing its ID produces a conflict. JSON property order and insignificant whitespace do not matter. Existing rows from before payload preservation return 409 on replay because exact equality cannot be established.
+
+For a new physical observation, generate a new `eventId`. For a transport retry, keep all fields unchanged. Source time can be wrong and delivery can be delayed or out of order; these facts are retained. Clients must not assume a 503 or lost response means nothing was committed.
+
+The ingestion tests exercise the real HTTP boundary against isolated PostgreSQL containers. See [ADR 0004](decisions/0004-bootstrap-local-scan-ingestion.md) for the development access boundary and retry policy.
 
 ## Contract validation
 

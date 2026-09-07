@@ -24,6 +24,7 @@ public sealed class ScanDbContext(DbContextOptions<ScanDbContext> options) : DbC
         scan.Property(x => x.CloudReceivedAtUtc).HasColumnName("cloud_received_at_utc");
         scan.Property(x => x.IdentifierTechnology).HasColumnName("identifier_technology").IsRequired();
         scan.Property(x => x.IdentifierValue).HasColumnName("identifier_value").IsRequired();
+        scan.Property(x => x.PayloadJson).HasColumnName("payload_json");
         scan.HasIndex(x => new { x.TenantId, x.PlantId, x.CloudReceivedAtUtc })
             .HasDatabaseName("ix_scan_observations_tenant_plant_received");
     }
