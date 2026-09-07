@@ -26,7 +26,7 @@ public sealed class HealthEndpointTests
     }
 
     [Fact]
-    public async Task ScanEndpoint_IsNotImplemented()
+    public async Task ScanEndpoint_IsAbsentOutsideDevelopment()
     {
         using var application = CreateApplication(null);
         using var client = application.CreateClient();

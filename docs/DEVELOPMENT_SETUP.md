@@ -260,7 +260,7 @@ Stop the API with **Ctrl+C**, and stop the development database with `docker com
 
 ## Repository-local .NET tools
 
-For the gateway foundation, see [Run the local gateway](#run-the-local-gateway) below. It does not yet require a migration command.
+For gateway startup and its explicit migration command, see [Run the local gateway](#run-the-local-gateway) below.
 
 `.config/dotnet-tools.json` is a tool manifest: a list of command-line tools and the exact versions this repository uses. The directory holds configuration, not the installed tool binaries or database files.
 
@@ -313,16 +313,18 @@ The ingestion tests exercise the real HTTP boundary against isolated PostgreSQL 
 
 ## Run the local gateway
 
-Checkpoint 1 provides an application and database connectivity checks only. There are no gateway scan endpoints, tables, migrations, or forwarding worker yet. The cloud API does not need to run.
+The gateway provides health checks and durable local scan acceptance with a pending outbox. The cloud API does not need to run. Cloud forwarding is not implemented yet.
 
 With Docker Desktop running, open a terminal at the repository root:
 
 ```powershell
 docker compose up --detach --wait plant-postgres
+dotnet tool restore
+dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Development
 dotnet run --project apps/edge/Laundry.Edge
 ```
 
-The first command starts only the plant database. `--detach` leaves the container running in the background; `--wait` waits for its health check. The second command starts the gateway on `http://localhost:5200` and keeps that terminal occupied. Package restore/build happens automatically when needed.
+The first command starts only the plant database. `--detach` leaves the container running in the background; `--wait` waits for its health check. The next commands restore the repository's migration tool and apply the gateway's migration, creating `plant.observations` and `plant.outbox`. Repeating the migration command preserves data. The final command starts the gateway on `http://localhost:5200` and keeps that terminal occupied. Startup does not apply migrations automatically.
 
 In another terminal:
 
@@ -370,7 +372,38 @@ Run the gateway tests with Docker available:
 dotnet test apps/edge/Laundry.Edge.Tests
 ```
 
-The outage test uses a disposable isolated PostgreSQL container, not your development database, and runs without a cloud service. The remaining gateway tests need no Docker and can run with `--filter "Category!=Database"`.
+Database tests use disposable isolated PostgreSQL containers, not your development database, and run without a cloud service. Contract and non-database health tests can run with `--filter "Category!=Database"`.
+
+### Submit a scan to the gateway
+
+With the migration applied and gateway running, use another terminal:
+
+```powershell
+$submission = Get-Content packages/contracts/examples/submit-scan.v1.barcode.json -Raw
+Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
+```
+
+Expect `status: acceptedLocally`, a gateway acceptance timestamp, and `deliveryStatus: pending`. Repeat the same command to see `alreadyAcceptedLocally` with the original timestamp. Both mean saved at the plant, not synchronized or a business action approved. The RFID submission example works with the same default simulator scope.
+
+The gateway transaction saves the scan plus an outbox entry (a durable to-do item for future cloud delivery). If either write fails, neither commits. All outbox entries remain pending until we implement forwarding. Application and database restarts preserve these records.
+
+The Development-only endpoint checks loopback access and the configured `ScanAcceptance` tenant/plant/station/device tuple. It rejects caller-supplied gateway timestamps, source mismatches (403), invalid submissions (400), conflicting ID reuse (409), oversized bodies (413), and non-JSON content (415). A storage error returns 503 with a retry hint; keep the same submission because the commit outcome may be uncertain. Do not expose this endpoint to other machines before authentication is implemented.
+
+Inspect pending delivery bookkeeping without printing tag values:
+
+```powershell
+docker compose exec plant-postgres psql --username laundry_edge --dbname laundry_plant --command 'SELECT event_id, status FROM plant.outbox;'
+```
+
+For a fresh synthetic observation, assign a new ID once and then preserve it for retries:
+
+```powershell
+$newScan = Get-Content packages/contracts/examples/submit-scan.v1.barcode.json -Raw | ConvertFrom-Json
+$newScan.eventId = [guid]::NewGuid().ToString()
+$newScan.correlationId = $newScan.eventId
+$submission = $newScan | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
+```
 
 ## Contract validation
 

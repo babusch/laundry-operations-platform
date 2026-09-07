@@ -1,7 +1,7 @@
 # Local gateway implementation plan
 
 Date: 2026-09-07  
-Status: Overall direction and PostgreSQL storage approved by the user. Checkpoint 1 is implemented; checkpoints 2–5 remain planned. Storage reasoning is recorded in [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md).
+Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–2 are implemented; checkpoints 3–5 remain planned. Storage reasoning is recorded in [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md); acceptance details are in [ADR 0006](decisions/0006-durable-local-scan-acceptance.md).
 
 ## Purpose and boundaries
 
@@ -40,7 +40,7 @@ Accepted means the raw observation was recorded, not that a movement, production
 
 ### Submission versus accepted-event contract
 
-Propose a versioned station-to-gateway submission contract under `packages/contracts/requests/`. It excludes `gatewayAcceptedAtUtc`, which the origin cannot know. The gateway assigns that value when preparing the durable acceptance and produces the existing `scan.observed.v1` event. Unchanged retries return the original receipt and acceptance timestamp. Conflicting reuse of an ID is rejected without overwriting history. Define the exact submission schema at checkpoint 2, not speculatively at checkpoint 1.
+The implemented `packages/contracts/requests/submit-scan.v1.schema.json` excludes `gatewayAcceptedAtUtc`, which the origin cannot know. The gateway assigns that value when preparing durable acceptance and produces the existing `scan.observed.v1` event. Unchanged retries return the original receipt and acceptance timestamp. Conflicting reuse of an ID is rejected without overwriting history.
 
 ### Failure behavior
 
@@ -86,7 +86,7 @@ Add migrations under gateway persistence when schema changes are introduced. Add
 - Demonstrate that stopping the cloud leaves gateway readiness healthy, while losing the plant database makes readiness unhealthy.
 - Do not add scan ingestion, forwarding, hardware adapters, or UI yet.
 
-### 2. Durable local acceptance
+### 2. Durable local acceptance — implemented
 
 - Define and test the submission contract.
 - Add explicit migrations for observations and outbox storage.

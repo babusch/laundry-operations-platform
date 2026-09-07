@@ -37,6 +37,8 @@ JSON contracts use camelCase field names. The first concrete contract is `packag
 
 ## Delivery rules
 
+The gateway now accepts `submit-scan.v1` requests on its own Development-only `POST /api/scans`. It commits immutable accepted-event evidence and a pending outbox row in one plant database transaction before acknowledging local acceptance. Gateway time is assigned during transaction preparation and returned only after commit, unchanged on retry. No forwarding runs yet; every accepted scan remains pending. See [ADR 0006](decisions/0006-durable-local-scan-acceptance.md).
+
 The first implemented boundary is `POST /api/scans`, restricted to local Development use. It validates the shared v1 contract, checks server-configured tenant/plant scope, inserts atomically, and distinguishes unchanged retries from conflicting payloads. Original JSON is retained alongside relational fields. See [ADR 0004](decisions/0004-bootstrap-local-scan-ingestion.md) for limits; authenticated remote gateway ingestion remains a later checkpoint.
 
 - Assume at-least-once delivery, not exactly-once transport.

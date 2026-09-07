@@ -18,6 +18,14 @@ The event deliberately contains observation facts rather than item master data:
 
 The synthetic examples contain no real customer or tag data.
 
+## Submit scan v1
+
+`requests/submit-scan.v1.schema.json` is the station-to-gateway request, with synthetic `submit-scan.v1.barcode.json` and `submit-scan.v1.rfid.json` examples. It contains the observation fields but rejects `gatewayAcceptedAtUtc`: the gateway owns that timestamp. Both submission examples use the default development simulator station/device tuple.
+
+The gateway prepares the acceptance timestamp and event in its transaction, and exposes them only after commit. The stored accepted event satisfies `scan-observed.v1` and is retained unchanged for future delivery. Source timestamps and identifier strings are not rewritten. Tests keep the request's common field definitions aligned with the event contract.
+
+Submit requests to the gateway on port 5200; the cloud on port 5100 expects accepted events instead. A retry uses the same event ID and every original field unchanged. A new physical observation gets a new ID. The HTTP receipt distinguishes `acceptedLocally` (201), `alreadyAcceptedLocally` (200), and `deliveryStatus: pending`; it does not claim synchronization. Tenant/plant/station/device fields must match trusted scope, not establish their own authority.
+
 ## Evolution rules
 
 - Correct descriptions without changing the schema's meaning or accepted data.
