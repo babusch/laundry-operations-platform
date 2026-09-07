@@ -14,6 +14,7 @@ laundry-operations-platform/
 │  │  └─ Laundry.Modules/        Modular business capabilities
 │  ├─ edge/
 │  │  ├─ Laundry.Edge/           Gateway host and synchronization
+│  │  ├─ Laundry.Edge.Tests/     Gateway-local automated tests
 │  │  └─ Laundry.Edge.Adapters/  Hardware/protocol adapters
 │  └─ device-simulator/          Development and automated-test devices
 ├─ packages/
@@ -60,4 +61,3 @@ laundry-operations-platform     Cloud, web apps, schemas, and product documentat
 laundry-edge                    Gateway and hardware adapters
 laundry-infrastructure          Only if infrastructure has separate ownership
 ```
-

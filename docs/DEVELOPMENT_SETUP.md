@@ -114,7 +114,7 @@ The repository pins its language toolchain and defines its workspace and cross-p
 
 ## Local PostgreSQL
 
-The root `docker-compose.yml` defines one PostgreSQL development service. It uses a named Docker volume, so the database remains intact when its container is stopped or replaced. Its published port is bound to `127.0.0.1:15432` on this computer. PostgreSQL still uses port 5432 inside its container; port 15432 avoids a conflict with an existing Windows PostgreSQL service.
+The root `docker-compose.yml` defines two independent PostgreSQL development services: `postgres` for cloud data on `127.0.0.1:15432`, and `plant-postgres` for gateway data on `127.0.0.1:15433`. Each uses its own named volume, retaining its database when stopped or replaced. Both use port 5432 inside their separate containers; their host ports avoid a conflict with an existing Windows PostgreSQL service.
 
 The checked-in values are deliberately local-development credentials. To override them, copy `.env.example` to `.env` and edit that untracked file. Never reuse these values outside local development.
 
@@ -154,7 +154,7 @@ docker compose down
 
 ## .NET solution
 
-`LaundryOperations.sln` groups the cloud API and its tests. The background worker and edge gateway will be added as their checkpoints begin.
+`LaundryOperations.sln` groups the cloud API, local gateway, and their separate test projects. The cloud background worker remains a future checkpoint.
 
 Verify it with:
 
@@ -260,6 +260,8 @@ Stop the API with **Ctrl+C**, and stop the development database with `docker com
 
 ## Repository-local .NET tools
 
+For the gateway foundation, see [Run the local gateway](#run-the-local-gateway) below. It does not yet require a migration command.
+
 `.config/dotnet-tools.json` is a tool manifest: a list of command-line tools and the exact versions this repository uses. The directory holds configuration, not the installed tool binaries or database files.
 
 - `dotnet-ef` at version `10.0.11` manages EF Core migrations.
@@ -308,6 +310,67 @@ UUIDs and timestamps are checked against the embedded JSON Schema. Unknown item 
 For a new physical observation, generate a new `eventId`. For a transport retry, keep all fields unchanged. Source time can be wrong and delivery can be delayed or out of order; these facts are retained. Clients must not assume a 503 or lost response means nothing was committed.
 
 The ingestion tests exercise the real HTTP boundary against isolated PostgreSQL containers. See [ADR 0004](decisions/0004-bootstrap-local-scan-ingestion.md) for the development access boundary and retry policy.
+
+## Run the local gateway
+
+Checkpoint 1 provides an application and database connectivity checks only. There are no gateway scan endpoints, tables, migrations, or forwarding worker yet. The cloud API does not need to run.
+
+With Docker Desktop running, open a terminal at the repository root:
+
+```powershell
+docker compose up --detach --wait plant-postgres
+dotnet run --project apps/edge/Laundry.Edge
+```
+
+The first command starts only the plant database. `--detach` leaves the container running in the background; `--wait` waits for its health check. The second command starts the gateway on `http://localhost:5200` and keeps that terminal occupied. Package restore/build happens automatically when needed.
+
+In another terminal:
+
+```powershell
+Invoke-RestMethod http://localhost:5200/health
+Invoke-RestMethod http://localhost:5200/health/ready
+```
+
+Both should return `Healthy`:
+
+| Endpoint | What it proves |
+|---|---|
+| `/health` | The gateway process can answer HTTP requests. |
+| `/health/ready` | The gateway can connect to its plant PostgreSQL database. |
+
+Readiness does not yet prove write capacity, correct migrations, or scan acceptance. It deliberately does not check the cloud. Missing or unavailable database configuration produces HTTP 503 with `Unhealthy`; liveness remains healthy.
+
+The Development connection string `ConnectionStrings:Plant` uses database `laundry_plant`, user `laundry_edge`, local-only password `laundry_edge_local_dev_only`, and port 15433. Other environments must provide `ConnectionStrings__Plant`; do not expose this unauthenticated foundation over the network. The launch profile binds to localhost. If you override `PLANT_POSTGRES_*` in `.env`, also supply a matching `ConnectionStrings__Plant` in the gateway terminal: ASP.NET Core does not automatically read `.env`.
+
+To try a plant database outage while the gateway remains running:
+
+```powershell
+docker compose stop plant-postgres
+Invoke-RestMethod http://localhost:5200/health
+Invoke-WebRequest http://localhost:5200/health/ready -SkipHttpErrorCheck
+docker compose up --detach --wait plant-postgres
+Invoke-RestMethod http://localhost:5200/health/ready
+```
+
+During the outage, expect liveness 200 and readiness 503. `-SkipHttpErrorCheck` lets PowerShell 7 display the expected failure response instead of throwing. After recovery, readiness returns `Healthy` without restarting the gateway. The named volume is preserved.
+
+Inspect the database/container if needed:
+
+```powershell
+docker compose ps
+docker compose logs plant-postgres
+docker compose exec plant-postgres psql --username laundry_edge --dbname laundry_plant
+```
+
+Use `\q` to exit psql. Stop the gateway with **Ctrl+C** in its terminal, then `docker compose stop plant-postgres` to stop only its database. `docker compose down` affects both development database containers; never add `--volumes` unless deliberately deleting their data.
+
+Run the gateway tests with Docker available:
+
+```powershell
+dotnet test apps/edge/Laundry.Edge.Tests
+```
+
+The outage test uses a disposable isolated PostgreSQL container, not your development database, and runs without a cloud service. The remaining gateway tests need no Docker and can run with `--filter "Category!=Database"`.
 
 ## Contract validation
 

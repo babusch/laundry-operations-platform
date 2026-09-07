@@ -56,6 +56,8 @@ Modules own their domain rules and persistence mappings. Cross-module changes us
 
 ## Plant gateway
 
+See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host and local database health checks are implemented; scan acceptance and synchronization remain planned. [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md) records the confirmed storage choice.
+
 Run a gateway on a managed industrial PC or plant server. It:
 
 - Provides a stable local API to operator stations.
@@ -97,4 +99,3 @@ The PWA normally talks to the plant gateway over the LAN. IndexedDB is an emerge
 - Production: managed cloud services and separately managed plant installations.
 
 Each release must define cloud/edge compatibility. The gateway must tolerate a temporarily newer or older cloud version within the supported compatibility window.
-

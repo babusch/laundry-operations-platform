@@ -16,7 +16,11 @@ Current checkpoint: `POST /api/scans` validates the shared v1 JSON Schema and du
 
 Verification complete: all 44 .NET tests pass, covering validation, local-only access, tenant/plant boundaries, concurrent duplicates/conflicts, lost-acknowledgement retries, delayed observations, and database outage/recovery. The initial migration and additive payload-preservation migration are applied to the development database. Docker PostgreSQL uses `localhost:15432` to avoid an existing Windows PostgreSQL service on port 5432. See `docs/DEVELOPMENT_SETUP.md` for repeatable commands.
 
-Next implementation checkpoint: begin the local gateway's durable scan acceptance and forwarding path, using synthetic observations and the now-tested cloud ingestion boundary. Authenticated remote gateway access must be added before connecting across machines. Full workflow authorization, business effects, outbox forwarding, and item resolution are still pending.
+The user approved PostgreSQL for plant storage ([ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md)). Checkpoint 1 of the [local gateway plan](LOCAL_GATEWAY_PLAN.md) is implemented: `Laundry.Edge` runs on localhost:5200, with independent `plant-postgres` storage on port 15433 and its own named volume. Health endpoints distinguish process liveness from plant database connectivity; neither depends on cloud availability. No gateway application tables or migrations are needed yet, and startup does not mutate schemas.
+
+Gateway verification: all four new tests pass, including database outage/recovery without a cloud service, liveness without configuration, missing-configuration readiness, and absence of a scan endpoint. Together with the 44 cloud tests, all 48 .NET tests pass. The build has zero warnings/errors; Compose configuration validation and real local gateway health requests passed.
+
+Next checkpoint: define the station-to-gateway submission contract and add durable local acceptance with a transactional outbox. Forwarding follows separately. Authenticated remote access must be added before connecting across machines. Full workflow authorization, business effects, item resolution, and UI remain pending.
 
 Produce an executable walking skeleton in which a simulated scan travels through the operator application and local gateway to the cloud API and becomes visible in an audit view.
 

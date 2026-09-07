@@ -8,6 +8,7 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0002 — Start with a modular monolith](0002-start-with-a-modular-monolith.md)
 - [0003 — Use a local-first plant gateway](0003-use-a-local-first-plant-gateway.md)
 - [0004 — Bootstrap local scan ingestion](0004-bootstrap-local-scan-ingestion.md)
+- [0005 — Use PostgreSQL for plant storage](0005-use-postgresql-for-plant-storage.md)
 
 ## Template
 

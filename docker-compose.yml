@@ -20,5 +20,25 @@ services:
       retries: 10
       start_period: 10s
 
+  plant-postgres:
+    image: postgres:18.6-alpine3.23
+    environment:
+      POSTGRES_DB: ${PLANT_POSTGRES_DB:-laundry_plant}
+      POSTGRES_USER: ${PLANT_POSTGRES_USER:-laundry_edge}
+      POSTGRES_PASSWORD: ${PLANT_POSTGRES_PASSWORD:-laundry_edge_local_dev_only}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    ports:
+      - "127.0.0.1:${PLANT_POSTGRES_PORT:-15433}:5432"
+    shm_size: 128mb
+    volumes:
+      - plant-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready --username "$${POSTGRES_USER}" --dbname "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
 volumes:
   postgres-data:
+  plant-postgres-data:
