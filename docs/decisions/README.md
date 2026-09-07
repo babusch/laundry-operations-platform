@@ -10,6 +10,7 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0004 — Bootstrap local scan ingestion](0004-bootstrap-local-scan-ingestion.md)
 - [0005 — Use PostgreSQL for plant storage](0005-use-postgresql-for-plant-storage.md)
 - [0006 — Durable local scan acceptance](0006-durable-local-scan-acceptance.md)
+- [0007 — Forward the plant outbox to the local cloud](0007-forward-plant-outbox-to-local-cloud.md)
 
 ## Template
 

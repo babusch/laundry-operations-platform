@@ -3,6 +3,7 @@ using System;
 using Laundry.Edge.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Laundry.Edge.Persistence.Migrations
 {
     [DbContext(typeof(PlantDbContext))]
-    partial class PlantDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260907185326_OutboxDeliveryTracking")]
+    partial class OutboxDeliveryTracking
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

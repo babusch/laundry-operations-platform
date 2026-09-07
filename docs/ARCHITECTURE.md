@@ -56,7 +56,7 @@ Modules own their domain rules and persistence mappings. Cross-module changes us
 
 ## Plant gateway
 
-See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host, local health checks, and transactional scan acceptance/outbox are implemented; cloud forwarding remains planned. [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md) records storage choice and [ADR 0006](decisions/0006-durable-local-scan-acceptance.md) defines the local acceptance boundary.
+See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host, local health checks, transactional acceptance/outbox, and Development-only forwarding worker are implemented. [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md) records storage choice, [ADR 0006](decisions/0006-durable-local-scan-acceptance.md) defines acceptance, and [ADR 0007](decisions/0007-forward-plant-outbox-to-local-cloud.md) defines delivery. Authenticated remote access remains planned.
 
 Run a gateway on a managed industrial PC or plant server. It:
 

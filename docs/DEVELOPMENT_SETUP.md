@@ -313,7 +313,7 @@ The ingestion tests exercise the real HTTP boundary against isolated PostgreSQL 
 
 ## Run the local gateway
 
-The gateway provides health checks and durable local scan acceptance with a pending outbox. The cloud API does not need to run. Cloud forwarding is not implemented yet.
+The gateway provides health checks, durable local scan acceptance, and background outbox forwarding. The cloud API does not need to run for local acceptance; delivery waits and retries when the cloud is unavailable. Development forwarding is enabled by default.
 
 With Docker Desktop running, open a terminal at the repository root:
 
@@ -383,9 +383,9 @@ $submission = Get-Content packages/contracts/examples/submit-scan.v1.barcode.jso
 Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
 ```
 
-Expect `status: acceptedLocally`, a gateway acceptance timestamp, and `deliveryStatus: pending`. Repeat the same command to see `alreadyAcceptedLocally` with the original timestamp. Both mean saved at the plant, not synchronized or a business action approved. The RFID submission example works with the same default simulator scope.
+Expect `status: acceptedLocally`, a gateway acceptance timestamp, and initially `deliveryStatus: pending`. Repeat the same command to see `alreadyAcceptedLocally` with the original timestamp and current recorded delivery status. Local acceptance means saved at the plant, not a business action approved. The RFID submission example works with the same default simulator scope.
 
-The gateway transaction saves the scan plus an outbox entry (a durable to-do item for future cloud delivery). If either write fails, neither commits. All outbox entries remain pending until we implement forwarding. Application and database restarts preserve these records.
+The gateway transaction saves the scan plus an outbox entry (a durable to-do item for cloud delivery). If either write fails, neither commits. A background worker delivers stored events without changing their payloads and records confirmed cloud receipts. Application and database restarts preserve these records.
 
 The Development-only endpoint checks loopback access and the configured `ScanAcceptance` tenant/plant/station/device tuple. It rejects caller-supplied gateway timestamps, source mismatches (403), invalid submissions (400), conflicting ID reuse (409), oversized bodies (413), and non-JSON content (415). A storage error returns 503 with a retry hint; keep the same submission because the commit outcome may be uncertain. Do not expose this endpoint to other machines before authentication is implemented.
 
@@ -404,6 +404,70 @@ $newScan.correlationId = $newScan.eventId
 $submission = $newScan | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
 ```
+
+## Forward gateway scans to the local cloud
+
+Run all commands from the repository root. First start both databases and apply migrations explicitly, with applications stopped:
+
+```powershell
+docker compose up --detach --wait
+dotnet tool restore
+dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
+dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Development
+```
+
+The new gateway migration adds delivery-tracking columns to existing outbox rows without deleting pending scans. Start the cloud in one terminal:
+
+```powershell
+dotnet run --project apps/cloud/Laundry.Api
+```
+
+Start the gateway in another:
+
+```powershell
+dotnet run --project apps/edge/Laundry.Edge
+```
+
+Submit a fresh synthetic scan using the gateway instructions above. Its local receipt does not wait for the cloud. Within a few seconds, inspect delivery state:
+
+```powershell
+docker compose exec plant-postgres psql --username laundry_edge --dbname laundry_plant --command 'SELECT event_id, status, attempts, next_attempt_at_utc, cloud_received_at_utc, last_error FROM plant.outbox;'
+```
+
+| Status | Meaning |
+|---|---|
+| `pending` | Saved locally; awaiting a confirmed cloud receipt, possibly retrying. |
+| `synchronized` | Cloud returned a validated receipt for this event; its receipt time is saved. |
+| `needsAttention` | Cloud rejected the request or configuration/access needs intervention; the event is retained. |
+
+To try an outage, stop only the cloud API using **Ctrl+C** in its terminal, leaving gateway and plant database running. Submit a new scan: it is still accepted locally and remains pending. Restart the cloud API; the gateway retries automatically. Delays start around 4–5 seconds and grow up to 4–5 minutes, with server retry hints also respected. Do not expect immediate delivery after a prolonged outage.
+
+Restarting the gateway preserves pending rows and their retry schedule. An attempt interrupted mid-delivery can wait for its 30-second lease to expire before replay. If the cloud had already saved it, the replay is recognized instead of inserting a duplicate. Gateway readiness remains about local database connectivity, not cloud reachability or queue health.
+
+`Forwarding:Endpoint` defaults to `http://127.0.0.1:5100/api/scans`. Only literal loopback HTTP IP endpoints are allowed; redirects and proxies are disabled. The worker never runs outside Development, even if enabled. This is not authenticated remote gateway support.
+
+To temporarily keep scans local, set this in the gateway terminal before starting it:
+
+```powershell
+$env:Forwarding__Enabled = 'false'
+dotnet run --project apps/edge/Laundry.Edge
+```
+
+After stopping that process, remove the override to restore the Development default:
+
+```powershell
+Remove-Item Env:Forwarding__Enabled
+```
+
+HTTP 408/429/5xx, connection failures, timeouts, and invalid receipts are retried. Other responses become `needsAttention`, including 401/403/404/409. Check both apps' configuration and safe error codes; do not edit original events or change event IDs to bypass conflicts. A supported administrative replay interface is deferred to the diagnostics checkpoint.
+
+Run the cross-component test with Docker available:
+
+```powershell
+dotnet test tests/synchronization/Laundry.Synchronization.Tests
+```
+
+It hosts the real gateway and cloud applications with separate temporary databases and injects transport failures, including a lost response after cloud commit. It does not modify your Compose databases.
 
 ## Contract validation
 

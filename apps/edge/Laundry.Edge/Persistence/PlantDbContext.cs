@@ -27,6 +27,12 @@ public sealed class PlantDbContext(DbContextOptions<PlantDbContext> options) : D
         outbox.Property(x => x.EventId).HasColumnName("event_id").ValueGeneratedNever();
         outbox.Property(x => x.Status).HasColumnName("status").IsRequired();
         outbox.HasIndex(x => x.Status);
+        outbox.Property(x => x.Attempts).HasColumnName("attempts").HasDefaultValue(0);
+        outbox.Property(x => x.NextAttemptAtUtc).HasColumnName("next_attempt_at_utc");
+        outbox.Property(x => x.LeaseId).HasColumnName("lease_id");
+        outbox.Property(x => x.LeaseUntilUtc).HasColumnName("lease_until_utc");
+        outbox.Property(x => x.CloudReceivedAtUtc).HasColumnName("cloud_received_at_utc");
+        outbox.Property(x => x.LastError).HasColumnName("last_error");
         outbox.HasOne<LocalObservation>().WithOne().HasForeignKey<OutboxEntry>(x => x.EventId)
             .OnDelete(DeleteBehavior.Restrict);
     }

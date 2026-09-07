@@ -1,12 +1,17 @@
 using Laundry.Edge.Health;
 using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
+using Laundry.Edge.Synchronization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<SubmissionValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddHttpClient<CloudDelivery>().ConfigurePrimaryHttpMessageHandler(() =>
+    new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
+builder.Services.AddScoped<OutboxDispatcher>();
+builder.Services.AddHostedService<OutboxWorker>();
 
 builder.Services.AddDbContext<PlantDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Plant")));

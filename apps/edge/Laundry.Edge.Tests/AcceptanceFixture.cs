@@ -33,6 +33,7 @@ public sealed class AcceptanceFixture : IAsyncLifetime
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Plant"] = ConnectionString,
+                ["Forwarding:Enabled"] = "false",
                 ["ScanAcceptance:Enabled"] = enabled.ToString(),
                 ["ScanAcceptance:TenantId"] = tenant ?? "11111111-1111-4111-8111-111111111111",
                 ["ScanAcceptance:PlantId"] = plant ?? "22222222-2222-4222-8222-222222222222",
