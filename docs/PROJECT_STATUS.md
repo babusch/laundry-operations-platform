@@ -28,7 +28,7 @@ Checkpoint 4 is complete: Development/loopback-only `/api/sync` summary, bounded
 
 Current verification: all 130 .NET tests pass (85 gateway, 44 cloud, one cross-component scenario). The build succeeds with zero warnings/errors, and the 10 Node contract tests previously passed with unchanged contracts. Tests cover scoped diagnostics, pagination, replay idempotency/concurrency, stale state/live lease rejection, audit/requeue rollback, storage outage/recovery, and replay through the real gateway/cloud path without payload changes or duplicates. An outage test exposed EF's wrapped transient database exception; diagnostics now return a safe 503 for that case. Live summary/list requests returned two synchronized scans, zero pending, and zero needs-attention records without exposing payloads.
 
-Next checkpoint: authenticated remote access (checkpoint 5). The existing diagnostics/replay routes remain local development tools with an explicitly unattributed audit actor, not production administration. Full workflow authorization, business effects, item resolution, and UI remain pending.
+Checkpoint 5.1 is in review: [proposed ADR 0009](decisions/0009-identity-permissions-and-offline-access.md) defines machine/human identities, permissions, and a proposed gateway OAuth client-credentials approach. The user approved the offline-access policy on 2026-09-08; the broader proposal is not yet accepted or implemented. Confirm identity-provider and deployment ownership before 5.2. The user also confirmed that the pilot must lead to a reusable, configurable product for different companies, plants, and supported hardware (see PRODUCT.md). Existing diagnostics/replay routes remain local development tools with an explicitly unattributed audit actor, not production administration. Full workflow authorization, business effects, item resolution, and UI remain pending.
 
 Produce an executable walking skeleton in which a simulated scan travels through the operator application and local gateway to the cloud API and becomes visible in an audit view.
 
@@ -43,6 +43,8 @@ Before that implementation begins, confirm:
 - Regulatory, hygiene, retention, and data-residency constraints.
 
 ## Active architectural baseline
+
+Approved station requirement (2026-09-08): stable source identity with configurable operational purpose (dedicated, flexible, or default-with-switching). Fixed station roles are optional. See DOMAIN.md and PRODUCT.md. This is documented only; the raw scan contract and application behavior are unchanged.
 
 - Repository: one monorepo.
 - Cloud: ASP.NET Core modular monolith, worker, PostgreSQL, object storage, and Redis only when justified.

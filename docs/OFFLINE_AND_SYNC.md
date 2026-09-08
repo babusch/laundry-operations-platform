@@ -6,6 +6,8 @@ Normal receiving, production, packing, and dispatch scans must continue when int
 
 ## Storage layers
 
+The user-approved initial secure-slice policy allows enrolled sources with locally valid credentials to continue raw scans during internet/cloud identity outages. New enrollment and privilege grants require online authorization initially, as does supervisor replay reauthentication. Central revocation cannot be learned instantly while disconnected. This policy is not yet implemented; see [ADR 0009](decisions/0009-identity-permissions-and-offline-access.md) for boundaries and unresolved credential-lifetime/deployment details.
+
 1. **PWA IndexedDB queue:** temporary protection when a station cannot reach the gateway.
 2. **Plant PostgreSQL:** durable store for locally accepted operational events and the subset of reference data needed to operate.
 3. **Cloud PostgreSQL:** consolidated multi-plant state and long-term business system of record.
