@@ -1,7 +1,7 @@
 # Local gateway implementation plan
 
 Date: 2026-09-07  
-Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–3 are implemented; checkpoints 4–5 remain planned. Storage reasoning is recorded in [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md), acceptance in [ADR 0006](decisions/0006-durable-local-scan-acceptance.md), and local forwarding in [ADR 0007](decisions/0007-forward-plant-outbox-to-local-cloud.md).
+Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented; checkpoint 5 remains planned. Storage reasoning is recorded in [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md), acceptance in [ADR 0006](decisions/0006-durable-local-scan-acceptance.md), local forwarding in [ADR 0007](decisions/0007-forward-plant-outbox-to-local-cloud.md), and diagnostics/replay in [ADR 0008](decisions/0008-local-sync-diagnostics-and-audited-replay.md). See project status for current verification.
 
 ## Purpose and boundaries
 
@@ -99,7 +99,7 @@ Add migrations under gateway persistence when schema changes are introduced. Add
 - Remain on one PC under the existing cloud Development boundary.
 - Demonstrate cloud recovery draining pending events without duplicates.
 
-### 4. Failure handling and diagnostics
+### 4. Failure handling and diagnostics — implemented and verified
 
 - Extend tests for lost acknowledgements, restarts, outages, delayed events, wrong clocks, and concurrent delivery.
 - Expose pending count, oldest pending age, and safe failure diagnostics.

@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 ## Current phase
 
@@ -22,9 +22,13 @@ Gateway `POST /api/scans` validates `submit-scan.v1`, assigns gateway time, and 
 
 The gateway now forwards stored events unchanged to the local cloud API in Development. Durable scoped leases, retry scheduling, and validated receipts update outbox state to `synchronized`; permanent failures become `needsAttention`. Transient outages remain pending without blocking local acceptance. Both gateway migrations (`LocalScanAcceptance`, `OutboxDeliveryTracking`) are applied locally; startup does not mutate schemas. See [ADR 0007](decisions/0007-forward-plant-outbox-to-local-cloud.md).
 
-Verification: all 107 .NET tests pass (62 gateway, 44 cloud, one cross-component synchronization test), as do all 10 Node contract tests. The build has zero warnings/errors. Tests cover acceptance atomicity and boundaries, retry scheduling, permanent rejection, invalid receipts, scoped dispatch, lease expiry/stale completion, and failure of local receipt bookkeeping. The cross-component test uses both real applications and separate PostgreSQL databases, simulates cloud outage and response loss after cloud commit, restarts the gateway, and verifies two events synchronize without duplicate cloud observations. A live localhost smoke test synchronized the earlier pending scan plus one new synthetic scan; both remain in the development databases. The gateway and cloud processes were stopped afterward; both database containers remain running.
+Two synthetic gateway observations remain synchronized in development storage. Docker recovered after the user started it without rebooting. The plant database is running; the gateway smoke-test process was stopped afterward.
 
-Next checkpoint: failure diagnostics, pending/oldest-age visibility, and controlled handling of needs-attention records. Basic permanent-failure preservation is already in place; an administrative replay interface is not. Authenticated remote access must be added before connecting across machines. Full workflow authorization, business effects, item resolution, and UI remain pending.
+Checkpoint 4 is complete: Development/loopback-only `/api/sync` summary, bounded metadata lists/details, replay history, and idempotent audited replay. The `ReplayAudit` migration is applied to the local plant database. See [ADR 0008](decisions/0008-local-sync-diagnostics-and-audited-replay.md) and the setup guide.
+
+Current verification: all 130 .NET tests pass (85 gateway, 44 cloud, one cross-component scenario). The build succeeds with zero warnings/errors, and the 10 Node contract tests previously passed with unchanged contracts. Tests cover scoped diagnostics, pagination, replay idempotency/concurrency, stale state/live lease rejection, audit/requeue rollback, storage outage/recovery, and replay through the real gateway/cloud path without payload changes or duplicates. An outage test exposed EF's wrapped transient database exception; diagnostics now return a safe 503 for that case. Live summary/list requests returned two synchronized scans, zero pending, and zero needs-attention records without exposing payloads.
+
+Next checkpoint: authenticated remote access (checkpoint 5). The existing diagnostics/replay routes remain local development tools with an explicitly unattributed audit actor, not production administration. Full workflow authorization, business effects, item resolution, and UI remain pending.
 
 Produce an executable walking skeleton in which a simulated scan travels through the operator application and local gateway to the cloud API and becomes visible in an audit view.
 

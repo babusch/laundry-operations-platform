@@ -26,7 +26,7 @@ public sealed class AcceptanceFixture : IAsyncLifetime
     }
 
     public WebApplicationFactory<Program> CreateApplication(string environment = "Development",
-        string address = "127.0.0.1", bool enabled = true, string? tenant = null, string? plant = null) =>
+        string address = "127.0.0.1", bool enabled = true, string? tenant = null, string? plant = null, bool diagnostics = true) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
@@ -34,6 +34,7 @@ public sealed class AcceptanceFixture : IAsyncLifetime
             {
                 ["ConnectionStrings:Plant"] = ConnectionString,
                 ["Forwarding:Enabled"] = "false",
+                ["SyncDiagnostics:Enabled"] = diagnostics.ToString(),
                 ["ScanAcceptance:Enabled"] = enabled.ToString(),
                 ["ScanAcceptance:TenantId"] = tenant ?? "11111111-1111-4111-8111-111111111111",
                 ["ScanAcceptance:PlantId"] = plant ?? "22222222-2222-4222-8222-222222222222",

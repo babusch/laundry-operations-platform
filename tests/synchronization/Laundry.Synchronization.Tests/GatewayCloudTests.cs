@@ -104,6 +104,32 @@ public sealed class GatewayCloudTests
         using var retry = await restartedClient.PostAsJsonAsync("/api/scans", submission);
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         Assert.Contains("synchronized", await retry.Content.ReadAsStringAsync());
+
+        // Simulate an access/configuration rejection, then explicitly replay after correction.
+        network.Reject = true;
+        var replayEventId = Guid.NewGuid();
+        submission["eventId"] = replayEventId.ToString();
+        using var rejectedSubmission = await restartedClient.PostAsJsonAsync("/api/scans", submission);
+        Assert.Equal(HttpStatusCode.Created, rejectedSubmission.StatusCode);
+        QueueItem? diagnostic = null;
+        await WaitFor(async () =>
+        {
+            diagnostic = await restartedClient.GetFromJsonAsync<QueueItem>($"/api/sync/events/{replayEventId}");
+            return diagnostic?.Status == "needsAttention";
+        });
+        var original = await local.Observations.AsNoTracking().SingleAsync(x => x.EventId == replayEventId);
+        network.Reject = false;
+        var replayRequest = new ReplayRequest(Guid.NewGuid(), diagnostic!.Attempts, "configurationCorrected");
+        using var replay = await restartedClient.PostAsJsonAsync($"/api/sync/events/{replayEventId}/replay", replayRequest);
+        Assert.Equal(HttpStatusCode.Accepted, replay.StatusCode);
+        await WaitFor(async () =>
+            (await restartedClient.GetFromJsonAsync<QueueItem>($"/api/sync/events/{replayEventId}"))?.Status == "synchronized");
+        Assert.Equal(original.EventJson, (await remote.Observations.SingleAsync(x => x.EventId == replayEventId)).PayloadJson);
+        Assert.Equal(1, await remote.Observations.CountAsync(x => x.EventId == replayEventId));
+        Assert.Equal(1, await local.ReplayAudits.CountAsync(x => x.EventId == replayEventId));
+        using var replayRetry = await restartedClient.PostAsJsonAsync($"/api/sync/events/{replayEventId}/replay", replayRequest);
+        Assert.Equal(HttpStatusCode.OK, replayRetry.StatusCode);
+        Assert.Equal("synchronized", (await local.Outbox.AsNoTracking().SingleAsync(x => x.EventId == replayEventId)).Status);
     }
 
     private static async Task WaitFor(Func<Task<bool>> condition)
@@ -114,6 +140,7 @@ public sealed class GatewayCloudTests
     private sealed class NetworkState
     {
         public volatile bool Reachable;
+        public volatile bool Reject;
         public int LostReceipts;
     }
     private sealed class UnreliableNetwork(NetworkState state) : DelegatingHandler
@@ -121,6 +148,7 @@ public sealed class GatewayCloudTests
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             if (!state.Reachable) return new(HttpStatusCode.ServiceUnavailable);
+            if (state.Reject) return new(HttpStatusCode.Forbidden);
             var response = await base.SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.Created && Interlocked.CompareExchange(ref state.LostReceipts, 1, 0) == 0)
             {

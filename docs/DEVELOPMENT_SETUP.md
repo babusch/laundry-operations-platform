@@ -459,7 +459,7 @@ After stopping that process, remove the override to restore the Development defa
 Remove-Item Env:Forwarding__Enabled
 ```
 
-HTTP 408/429/5xx, connection failures, timeouts, and invalid receipts are retried. Other responses become `needsAttention`, including 401/403/404/409. Check both apps' configuration and safe error codes; do not edit original events or change event IDs to bypass conflicts. A supported administrative replay interface is deferred to the diagnostics checkpoint.
+HTTP 408/429/5xx, connection failures, timeouts, and invalid receipts are retried. Other responses become `needsAttention`, including 401/403/404/409. Check both apps' configuration and safe error codes; do not edit original events or change event IDs to bypass conflicts. Use the local audited replay interface below only after reviewing the failure.
 
 Run the cross-component test with Docker available:
 
@@ -468,6 +468,54 @@ dotnet test tests/synchronization/Laundry.Synchronization.Tests
 ```
 
 It hosts the real gateway and cloud applications with separate temporary databases and injects transport failures, including a lost response after cloud commit. It does not modify your Compose databases.
+
+## Inspect synchronization and safely replay a failure
+
+Apply the gateway migrations with the gateway stopped, then start it:
+
+```powershell
+dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Development
+dotnet run --project apps/edge/Laundry.Edge
+```
+
+The `ReplayAudit` migration adds an audit table without changing or deleting scans. In a second terminal:
+
+```powershell
+Invoke-RestMethod http://localhost:5200/api/sync/summary | ConvertTo-Json -Depth 5
+Invoke-RestMethod 'http://localhost:5200/api/sync/events?status=needsAttention&limit=50' | ConvertTo-Json -Depth 5
+```
+
+The summary reports pending/synchronized/needs-attention counts, oldest pending age in seconds (null when none), last confirmed cloud receipt time, forwarding enablement, and the worker's most recent iteration. A successful iteration does not mean the cloud is reachable: examine delivery states and error codes too. Worker heartbeat information resets at restart. A database failure gives HTTP 503 rather than pretending the queue is empty. Health readiness still checks plant connectivity only.
+
+The list includes event IDs, acceptance times, attempts, retry/lease timing, cloud receipt time, and safe error codes—not tag identifiers or scan payloads. Omit `status` for all states; `limit` is 1–100 (default 50), `offset` defaults to zero. Follow `nextOffset` until null. Lists can shift as deliveries change, so refresh a record before acting. Audit lists use pages of 50 with the same `nextOffset` convention.
+
+For a specific event, replace the placeholder with an ID from the list:
+
+```powershell
+$eventId = 'PASTE-EVENT-ID-HERE'
+$record = Invoke-RestMethod "http://localhost:5200/api/sync/events/$eventId"
+$record | ConvertTo-Json
+Invoke-RestMethod "http://localhost:5200/api/sync/events/$eventId/replays" | ConvertTo-Json -Depth 5
+```
+
+Review and correct the underlying issue first. Examples: `http_403` may mean mismatched source scope, `http_404` may mean the development route is disabled, and `http_409` means an event-ID conflict that resending alone will not fix. Do not change history to bypass a conflict. If the record is still `needsAttention` and a retry is justified, create one replay request:
+
+```powershell
+$replay = @{
+    requestId = [guid]::NewGuid().ToString()
+    expectedAttempts = $record.attempts
+    reasonCode = 'configurationCorrected'
+} | ConvertTo-Json
+Invoke-RestMethod -Method Post -Uri "http://localhost:5200/api/sync/events/$eventId/replay" -ContentType application/json -Body $replay
+```
+
+Allowed reasons are `configurationCorrected`, `cloudIssueResolved`, and `reviewedForRetry`. Choose the reason that actually applies. No free-text personal information is needed.
+
+HTTP 202 / `replayRequested` means the requeue and audit record committed together, not that the cloud accepted the scan. The sender will try the exact original event. If the response is lost, repeat the same `$replay` body with the same request ID; HTTP 200 / `replayAlreadyRequested` confirms that original command, even if delivery has since completed. A new intentional replay after another failure requires reviewing the new attempt count and generating a new request ID.
+
+HTTP 409 means stale state, a live lease, a record not in `needsAttention`, or changed request-ID reuse. Refresh and investigate rather than blindly retrying. A missing or out-of-scope event returns 404. On 503, retain the same replay request because its commit outcome might be uncertain.
+
+These routes are enabled only in Development with scan acceptance and `SyncDiagnostics:Enabled`, and require loopback access. The audit actor is explicitly `local-development-unattributed`, not an authenticated user. Do not expose these commands on the plant network before checkpoint 5 adds identity and authorization. No browser dashboard or bulk replay is included yet.
 
 ## Contract validation
 

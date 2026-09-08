@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Laundry.Edge.Scans;
+using Laundry.Edge.Synchronization;
 
 namespace Laundry.Edge.Persistence;
 
@@ -7,6 +8,7 @@ public sealed class PlantDbContext(DbContextOptions<PlantDbContext> options) : D
 {
     public DbSet<LocalObservation> Observations => Set<LocalObservation>();
     public DbSet<OutboxEntry> Outbox => Set<OutboxEntry>();
+    public DbSet<ReplayAudit> ReplayAudits => Set<ReplayAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,5 +37,20 @@ public sealed class PlantDbContext(DbContextOptions<PlantDbContext> options) : D
         outbox.Property(x => x.LastError).HasColumnName("last_error");
         outbox.HasOne<LocalObservation>().WithOne().HasForeignKey<OutboxEntry>(x => x.EventId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        var audit = modelBuilder.Entity<ReplayAudit>();
+        audit.ToTable("replay_audit", "plant");
+        audit.HasKey(x => x.RequestId);
+        audit.Property(x => x.RequestId).HasColumnName("request_id").ValueGeneratedNever();
+        audit.Property(x => x.EventId).HasColumnName("event_id");
+        audit.Property(x => x.TenantId).HasColumnName("tenant_id");
+        audit.Property(x => x.PlantId).HasColumnName("plant_id");
+        audit.Property(x => x.PreviousAttempts).HasColumnName("previous_attempts");
+        audit.Property(x => x.PreviousError).HasColumnName("previous_error");
+        audit.Property(x => x.ReasonCode).HasColumnName("reason_code");
+        audit.Property(x => x.Actor).HasColumnName("actor");
+        audit.Property(x => x.RequestedAtUtc).HasColumnName("requested_at_utc");
+        audit.HasIndex(x => new { x.TenantId, x.PlantId, x.EventId });
+        audit.HasOne<LocalObservation>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
     }
 }

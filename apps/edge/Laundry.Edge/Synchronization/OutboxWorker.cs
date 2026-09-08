@@ -1,7 +1,7 @@
 namespace Laundry.Edge.Synchronization;
 
 public sealed class OutboxWorker(IServiceScopeFactory scopes, IConfiguration configuration,
-    IHostEnvironment environment, ILogger<OutboxWorker> logger) : BackgroundService
+    IHostEnvironment environment, ILogger<OutboxWorker> logger, WorkerDiagnostics diagnostics) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -14,11 +14,13 @@ public sealed class OutboxWorker(IServiceScopeFactory scopes, IConfiguration con
                 using var scope = scopes.CreateScope();
                 var dispatched = await scope.ServiceProvider.GetRequiredService<OutboxDispatcher>()
                     .DispatchOneAsync(settings, stoppingToken);
+                diagnostics.Record(null);
                 if (dispatched) continue;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception)
             {
+                diagnostics.Record("iteration_failed");
                 // Keep local acceptance alive; do not log exception text that may contain data.
                 logger.LogWarning("Outbox iteration failed; retained work will be retried. Check plant storage and migrations.");
             }

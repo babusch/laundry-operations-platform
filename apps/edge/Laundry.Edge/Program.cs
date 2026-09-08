@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<SubmissionValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<WorkerDiagnostics>();
 builder.Services.AddHttpClient<CloudDelivery>().ConfigurePrimaryHttpMessageHandler(() =>
     new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
 builder.Services.AddScoped<OutboxDispatcher>();
@@ -27,6 +28,7 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanAcc
     if (new[] { source.TenantId, source.PlantId, source.StationId, source.DeviceId }.Contains(Guid.Empty))
         throw new InvalidOperationException("Configure nonempty development tenant, plant, station, and device IDs.");
     app.MapScanAcceptance(source);
+    if (app.Configuration.GetValue<bool>("SyncDiagnostics:Enabled")) app.MapSyncDiagnostics(source);
 }
 
 app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });

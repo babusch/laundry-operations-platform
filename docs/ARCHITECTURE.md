@@ -70,6 +70,8 @@ Run a gateway on a managed industrial PC or plant server. It:
 
 Do not expose plant equipment directly to the public internet.
 
+Development-only synchronization diagnostics and audited replay are available through `/api/sync`, scoped to the configured tenant/plant and restricted to loopback. This is an API tool, not a supervisor UI or authenticated administration; see [ADR 0008](decisions/0008-local-sync-diagnostics-and-audited-replay.md).
+
 ## Operator application
 
 The operator PWA is a separate deployable frontend sharing design components and generated contracts with the management application. It is optimized for large touch targets, scanner input, minimal typing, kiosk use, clear sound/visual feedback, and multilingual operation.

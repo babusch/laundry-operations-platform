@@ -21,7 +21,7 @@ public sealed class ForwardingBoundaryTests
             ["Forwarding:Endpoint"] = "deliberately invalid: must not be used"
         }).Build();
         using var worker = new OutboxWorker(new ForbiddenScopes(), config, new TestEnvironment(environment),
-            NullLogger<OutboxWorker>.Instance);
+            NullLogger<OutboxWorker>.Instance, new WorkerDiagnostics());
         await worker.StartAsync(default);
         await worker.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(5));
         await worker.StopAsync(default);

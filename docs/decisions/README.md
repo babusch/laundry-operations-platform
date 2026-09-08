@@ -11,6 +11,7 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0005 — Use PostgreSQL for plant storage](0005-use-postgresql-for-plant-storage.md)
 - [0006 — Durable local scan acceptance](0006-durable-local-scan-acceptance.md)
 - [0007 — Forward the plant outbox to the local cloud](0007-forward-plant-outbox-to-local-cloud.md)
+- [0008 — Local sync diagnostics and audited replay](0008-local-sync-diagnostics-and-audited-replay.md)
 
 ## Template
 
