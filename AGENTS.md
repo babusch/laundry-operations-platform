@@ -18,6 +18,14 @@ Build a reliable industrial laundry operations platform. Correctness, traceabili
    - Repository placement: `docs/REPOSITORY_STRUCTURE.md`
 3. Check `docs/decisions/` before revisiting an architectural choice.
 
+## Private environment files — all AI agents
+
+- Do not inspect private `.env` or `.env.*` files or retrieve their values indirectly unless the user explicitly authorizes the specific development-credential investigation. Limit authorized access to the relevant settings and keep values out of chat, logs, and tracked files. The committed placeholder-only `.env.example` can be read normally.
+- Do not request that the user paste passwords or private environment-file contents into chat. Authorization to inspect local development credentials does not authorize accessing production credentials or publishing secrets.
+- Exclude these files from broad searches and context collection. Git-ignore checks and filename-only tracking checks are permitted; do not read contents to verify exclusion.
+- The user normally maintains private environment files. Normal user-authorized application/Compose execution may consume them internally. Prefer status and public health checks; obtain explicit permission before secret inspection is needed for diagnosis.
+- Never stage or force-add private environment files. Git ignore rules prevent ordinary tracking, not filesystem access; these agent instructions are a behavioral rule, not a technical security boundary.
+
 ## Required UI design skill
 
 - For every task that creates, changes, prototypes, or reviews a user-facing interface, read and apply `.agents/skills/apple-design/SKILL.md` before planning or implementation.

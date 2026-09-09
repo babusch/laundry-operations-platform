@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 ## Current phase
 
@@ -43,6 +43,10 @@ Before that implementation begins, confirm:
 - Regulatory, hygiene, retention, and data-residency constraints.
 
 ## Active architectural baseline
+
+Latest identity verification (2026-09-09): Keycloak starts successfully and discovery/public signing keys pass normal trusted HTTPS verification. The current configured password differed from the identity database role's persisted password. Aligning that role with the current development setting fixed network authentication without deleting data. Loopback PostgreSQL uses trust and must not be used to prove password correctness; verification used the container-network hostname. Keycloak initialized the master realm and temporary `local-admin` account; interactive administrator login remains for the user to verify. Private `.env` stays ignored and untracked. Root, Claude, and Copilot instructions permit scoped development-credential inspection only with explicit user authorization, without publishing or committing values. No gateway authentication is enabled.
+
+Identity setup slice: the user approved product-managed identity and local Keycloak evaluation. The optional HTTPS-only development Compose stack, dedicated identity PostgreSQL volume, setup guide, and discovery smoke-test script are added (ADR 0010). Live startup and trusted HTTPS verification now pass. Gateway authentication is unchanged; 5.2 is not complete. Production provider and hosting remain open.
 
 Approved station requirement (2026-09-08): stable source identity with configurable operational purpose (dedicated, flexible, or default-with-switching). Fixed station roles are optional. See DOMAIN.md and PRODUCT.md. This is documented only; the raw scan contract and application behavior are unchanged.
 

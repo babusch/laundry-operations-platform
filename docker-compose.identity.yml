@@ -1,0 +1,47 @@
+name: laundry-identity-development
+
+services:
+  identity-postgres:
+    image: postgres:18.6-alpine3.23
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD:?Run the documented identity setup first}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    volumes:
+      - identity-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.3
+    command: ["start"]
+    depends_on:
+      identity-postgres:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://identity-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:?Run the documented identity setup first}
+      KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${IDENTITY_ADMIN_PASSWORD:?Choose a local bootstrap password}
+      KC_HOSTNAME: https://localhost:8443
+      KC_HTTP_ENABLED: "false"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/tls/localhost.pem
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/tls/localhost.key
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - type: bind
+        source: ./.docker/identity/tls
+        target: /opt/keycloak/conf/tls
+        read_only: true
+        bind:
+          create_host_path: false
+
+volumes:
+  identity-postgres-data:

@@ -79,6 +79,8 @@ For online human login, use OpenID Connect through the chosen identity provider,
 
 ## Open decisions
 
+Update: the user approved product-managed identity and local Keycloak evaluation; [ADR 0010](0010-local-keycloak-development.md) authorizes that setup only. Production provider/hosting and gateway integration details remain open.
+
 - Offline policy approved by the user on 2026-09-08; exact deployment lifetimes and procedures below remain unresolved.
 - Identity provider and ownership: existing organization-managed identity or product-managed identity?
 - Pilot gateway/station OS, managed browser constraints, and certificate/key deployment ownership.

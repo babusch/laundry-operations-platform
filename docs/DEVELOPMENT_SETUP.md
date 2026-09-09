@@ -114,6 +114,8 @@ The repository pins its language toolchain and defines its workspace and cross-p
 
 ## Local PostgreSQL
 
+Optional identity development now has a separate [Keycloak setup guide](LOCAL_IDENTITY_SETUP.md). Its explicit `docker-compose.identity.yml` commands do not change the default laundry stack below.
+
 The root `docker-compose.yml` defines two independent PostgreSQL development services: `postgres` for cloud data on `127.0.0.1:15432`, and `plant-postgres` for gateway data on `127.0.0.1:15433`. Each uses its own named volume, retaining its database when stopped or replaced. Both use port 5432 inside their separate containers; their host ports avoid a conflict with an existing Windows PostgreSQL service.
 
 The checked-in values are deliberately local-development credentials. To override them, copy `.env.example` to `.env` and edit that untracked file. Never reuse these values outside local development.
