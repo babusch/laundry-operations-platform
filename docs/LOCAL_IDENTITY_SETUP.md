@@ -77,6 +77,29 @@ docker compose -f docker-compose.identity.yml start
 
 Repeat the test after startup completes. Never add `--volumes` to a removal command unless you intentionally want to erase identity data. Closing the terminal clears its environment variables but does not stop containers. Existing default `docker compose` commands still operate only on the laundry stack.
 
+## Create and verify the development gateway identity
+
+Generate a third, distinct development-only password and save it in your password manager as `Laundry development — gateway identity`, username `gateway-development`. Add it to the existing private `.env` in the repository root:
+
+```dotenv
+GATEWAY_CLIENT_SECRET='your-generated-development-gateway-secret'
+```
+
+Do not reuse either Keycloak/database password, put the real value in `.env.example`, or share it in chat. If the generated value contains a single quote, generate another value for this local setup so the dotenv quoting remains unambiguous.
+
+Then recreate Keycloak so its startup import can create the separate application realm. The identity database volume and administrative realm remain intact:
+
+```powershell
+Remove-Item Env:IDENTITY_DB_PASSWORD, Env:IDENTITY_ADMIN_PASSWORD, Env:GATEWAY_CLIENT_SECRET -ErrorAction SilentlyContinue
+docker compose -f docker-compose.identity.yml up --detach
+./deploy/local/Initialize-Gateway-Identity.ps1
+./deploy/local/Test-Gateway-Identity.ps1
+```
+
+The first command prevents old terminal values from overriding `.env`. Compose recreates only what its changed configuration requires. On first use, Keycloak imports `laundry-development`; later starts skip that existing realm. The initialization script idempotently ensures the existing client is allowed to include only the declared gateway role; this is needed when bootstrap configuration evolves because startup import skips an existing realm. The test obtains a five-minute machine token, checks its issuer, cloud API audience, `scans.ingest` permission, and synthetic tenant/plant, and prints neither token nor credential.
+
+This is identity-provider verification only. The gateway and cloud applications do not use the token yet. The shared secret is a local bootstrap mechanism; deployment-grade per-gateway asymmetric authentication remains a required evaluation before production.
+
 ## Limits of this checkpoint
 
 ### Troubleshooting database password failures

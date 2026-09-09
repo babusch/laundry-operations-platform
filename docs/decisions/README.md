@@ -15,6 +15,7 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0009 — Identity, permissions, and offline access (proposed)](0009-identity-permissions-and-offline-access.md)
 
 - [0010 — Local Keycloak development service](0010-local-keycloak-development.md)
+- [0011 — Reproducible development gateway identity](0011-development-gateway-identity.md)
 
 ## Template
 

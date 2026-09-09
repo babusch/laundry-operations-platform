@@ -48,6 +48,8 @@ Latest identity verification (2026-09-09): Keycloak starts successfully, discove
 
 Identity setup slice: the user approved product-managed identity and local Keycloak evaluation. The optional HTTPS-only development Compose stack, dedicated identity PostgreSQL volume, setup guide, and discovery smoke-test script are added (ADR 0010). Live startup and trusted HTTPS verification now pass. Gateway authentication is unchanged; 5.2 is not complete. Production provider and hosting remain open.
 
+Development gateway identity bootstrap is complete (ADR 0011): the reproducible `laundry-development` realm imported successfully, and an idempotent initializer applies the explicit gateway role scope to existing realms. Live verification proves invalid credentials are rejected and the valid service account receives a five-minute token containing only the `scans.ingest` application permission, the cloud API audience, and fixed synthetic tenant/plant claims. The user's distinct gateway credential remains in ignored private `.env`; neither it nor the token is printed or stored. This local shared-secret proof does not approve production credentials or connect application authentication.
+
 Approved station requirement (2026-09-08): stable source identity with configurable operational purpose (dedicated, flexible, or default-with-switching). Fixed station roles are optional. See DOMAIN.md and PRODUCT.md. This is documented only; the raw scan contract and application behavior are unchanged.
 
 - Repository: one monorepo.

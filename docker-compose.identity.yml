@@ -18,7 +18,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.3
-    command: ["start"]
+    command: ["start", "--import-realm"]
     depends_on:
       identity-postgres:
         condition: service_healthy
@@ -29,6 +29,7 @@ services:
       KC_DB_PASSWORD: ${IDENTITY_DB_PASSWORD:?Run the documented identity setup first}
       KC_BOOTSTRAP_ADMIN_USERNAME: local-admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${IDENTITY_ADMIN_PASSWORD:?Choose a local bootstrap password}
+      GATEWAY_CLIENT_SECRET: ${GATEWAY_CLIENT_SECRET:?Choose a separate development gateway credential}
       KC_HOSTNAME: https://localhost:8443
       KC_HTTP_ENABLED: "false"
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/tls/localhost.pem
@@ -42,6 +43,10 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ./deploy/local/keycloak
+        target: /opt/keycloak/data/import
+        read_only: true
 
 volumes:
   identity-postgres-data:
