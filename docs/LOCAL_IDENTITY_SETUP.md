@@ -63,6 +63,8 @@ The test checks discovery metadata and public signing keys over normally validat
 
 Open [local Keycloak administration](https://localhost:8443/admin/) and sign in as `local-admin` with the bootstrap password you chose. Do not enter real employee/customer accounts. Do not create a gateway client yet; that is the next slice.
 
+Verified on 2026-09-09: trusted HTTPS discovery, signing-key publication, and interactive `local-admin` login all succeeded.
+
 ## Stop and restart without losing data
 
 With the private `.env` present (or saved passwords supplied as session variables):
