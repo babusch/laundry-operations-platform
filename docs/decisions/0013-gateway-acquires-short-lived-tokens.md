@@ -24,3 +24,5 @@ This does not approve production shared-secret provisioning, remote endpoints, c
 ## Revisit when
 
 Selecting production identity hosting and gateway enrollment, supporting remote Development/Staging plants, rotating credentials, or defining token and certificate storage for the target plant operating system.
+
+Verification update: a database-backed automated test and a live Keycloak stop/restart test prove that identity loss before token acquisition leaves the event pending, preserves the exact payload, and synchronizes automatically after recovery. Token acquisition and cloud delivery use separate bounded time windows so a cold identity request does not consume the cloud request budget.

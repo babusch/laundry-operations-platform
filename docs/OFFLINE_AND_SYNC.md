@@ -45,7 +45,7 @@ The Development-only forwarding worker delivers stored JSON to the local cloud A
 
 Local `/api/sync` diagnostics expose scoped counts, oldest pending age, safe per-event metadata, and replay audit history. A reviewed needs-attention event can be requeued with an idempotent request ID and expected attempt count, committing audit plus queue change atomically without modifying the scan. No remote or authenticated administration is enabled yet. See [ADR 0008](decisions/0008-local-sync-diagnostics-and-audited-replay.md).
 
-Cloud `POST /api/scans` remains restricted to loopback Development use, but now requires a signed, unexpired gateway token for the cloud API audience and `scans.ingest` permission. Tenant/plant registration comes from verified token claims and must match the event before storage. Original JSON and idempotent behavior remain unchanged. See [ADR 0012](decisions/0012-cloud-validates-gateway-tokens.md). Gateway token acquisition and authenticated remote production ingestion remain later work.
+Cloud `POST /api/scans` remains restricted to loopback Development use, but now requires a signed, unexpired gateway token for the cloud API audience and `scans.ingest` permission. Tenant/plant registration comes from verified token claims and must match the event before storage. The gateway acquires and caches short-lived tokens without making identity availability part of local acceptance. Original JSON and idempotent behavior remain unchanged. See [ADRs 0012](decisions/0012-cloud-validates-gateway-tokens.md) and [0013](decisions/0013-gateway-acquires-short-lived-tokens.md). Authenticated remote production ingestion remains later work.
 
 - Assume at-least-once delivery, not exactly-once transport.
 - Make processing effectively once through idempotency and uniqueness constraints.
@@ -84,6 +84,7 @@ Use scoped incremental synchronization and tombstones for removals. Avoid copyin
 ## Required resilience tests
 
 - Internet disappears before, during, and after scan acknowledgement.
+- Identity provider is unavailable before token acquisition; local acceptance continues and queued events synchronize unchanged after recovery.
 - Cloud accepts an event but the response is lost.
 - Gateway restarts with pending outbox events.
 - PWA closes with queued IndexedDB events.

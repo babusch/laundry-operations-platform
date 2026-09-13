@@ -459,6 +459,14 @@ docker compose exec plant-postgres psql --username laundry_edge --dbname laundry
 
 The durable retry implementation remains intact: cloud and identity outages keep events `pending`, permanent event rejection becomes `needsAttention`, and restart retains the queue. If the cloud rejects a cached token with 401, the gateway invalidates it, requests a replacement, and retries once. Rejected gateway credentials remain pending with a safe diagnostic code so correcting system configuration can resume the queue without replaying every event manually.
 
+The identity-outage recovery test can be repeated safely with an isolated disposable PostgreSQL container and simulated identity availability:
+
+```powershell
+dotnet test apps/edge/Laundry.Edge.Tests --filter "FullyQualifiedName~IdentityOutageRetainsEventUntilRecovery"
+```
+
+Live verification on 2026-09-13 also stopped the actual Keycloak container before a fresh gateway requested a token. Gateway readiness remained healthy, a synthetic scan was accepted locally and stayed pending with `identity_connection_failed`, and the same stored event synchronized automatically after Keycloak restarted. No database volume was removed.
+
 Run the cross-component test with Docker available:
 
 ```powershell

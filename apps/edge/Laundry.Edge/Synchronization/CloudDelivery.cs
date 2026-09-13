@@ -12,23 +12,20 @@ public sealed class CloudDelivery(HttpClient client, IGatewayTokenProvider token
 {
     public async Task<DeliveryResult> SendAsync(Uri endpoint, Guid eventId, string payload, CancellationToken cancellationToken)
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(5));
         try
         {
-            var token = await tokens.GetAsync(timeout.Token);
+            var token = await tokens.GetAsync(cancellationToken);
             if (!token.Succeeded) return new("pending", token.Error);
 
-            using var response = await SendAsync(endpoint, payload, token.AccessToken!, timeout.Token);
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
-            {
-                tokens.Invalidate(token.AccessToken!);
-                var replacement = await tokens.GetAsync(timeout.Token);
-                if (!replacement.Succeeded) return new("pending", replacement.Error);
-                using var retry = await SendAsync(endpoint, payload, replacement.AccessToken!, timeout.Token);
-                return await ClassifyAsync(retry, eventId, timeout.Token);
-            }
-            return await ClassifyAsync(response, eventId, timeout.Token);
+            var result = await SendAttemptAsync(endpoint, eventId, payload, token.AccessToken!, true,
+                cancellationToken);
+            if (result is not null) return result;
+
+            tokens.Invalidate(token.AccessToken!);
+            var replacement = await tokens.GetAsync(cancellationToken);
+            if (!replacement.Succeeded) return new("pending", replacement.Error);
+            return await SendAttemptAsync(endpoint, eventId, payload, replacement.AccessToken!, false,
+                cancellationToken) ?? new("needsAttention", "http_401");
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -44,15 +41,19 @@ public sealed class CloudDelivery(HttpClient client, IGatewayTokenProvider token
         }
     }
 
-    private async Task<HttpResponseMessage> SendAsync(Uri endpoint, string payload, string accessToken,
-        CancellationToken cancellationToken)
+    private async Task<DeliveryResult?> SendAttemptAsync(Uri endpoint, Guid eventId, string payload,
+        string accessToken, bool refreshOnUnauthorized, CancellationToken cancellationToken)
     {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(5));
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json"),
             Headers = { Authorization = new AuthenticationHeaderValue("Bearer", accessToken) }
         };
-        return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        if (refreshOnUnauthorized && response.StatusCode == HttpStatusCode.Unauthorized) return null;
+        return await ClassifyAsync(response, eventId, timeout.Token);
     }
 
     private static async Task<DeliveryResult> ClassifyAsync(HttpResponseMessage response, Guid eventId,

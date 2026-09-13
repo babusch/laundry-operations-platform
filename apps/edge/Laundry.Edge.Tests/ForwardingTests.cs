@@ -192,6 +192,40 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
     }
 
     [Fact]
+    public async Task IdentityOutageRetainsEventUntilRecovery_WithoutCallingCloudEarly()
+    {
+        var scan = await Seed();
+        var cloudCalls = 0;
+        string? deliveredPayload = null;
+        using var client = new HttpClient(new StubHandler(async (request, token) =>
+        {
+            cloudCalls++;
+            deliveredPayload = await request.Content!.ReadAsStringAsync(token);
+            return CloudDeliveryTests.Receipt(scan.EventId);
+        }));
+        var identity = new RecoveringTokenProvider();
+
+        Assert.True(await Dispatch(client, identity));
+        var pending = await Entry(scan.EventId);
+        Assert.Equal("pending", pending.Status);
+        Assert.Equal("identity_connection_failed", pending.LastError);
+        Assert.Equal(1, pending.Attempts);
+        Assert.Null(pending.CloudReceivedAtUtc);
+        Assert.Equal(0, cloudCalls);
+
+        identity.Available = true;
+        _clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.True(await Dispatch(client, identity));
+        var synchronized = await Entry(scan.EventId);
+        Assert.Equal("synchronized", synchronized.Status);
+        Assert.Equal(2, synchronized.Attempts);
+        Assert.NotNull(synchronized.CloudReceivedAtUtc);
+        Assert.Null(synchronized.LastError);
+        Assert.Equal(1, cloudCalls);
+        Assert.Equal(scan.EventJson, deliveredPayload);
+    }
+
+    [Fact]
     public async Task PermanentConflictDoesNotBlockFollowingEventsOrRetryForever()
     {
         var conflict = await Seed();
@@ -293,11 +327,12 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
         await database.SaveChangesAsync();
         return observation;
     }
-    private async Task<bool> Dispatch(HttpClient client)
+    private async Task<bool> Dispatch(HttpClient client, IGatewayTokenProvider? tokenProvider = null)
     {
         using var scope = fixture.Application.Services.CreateScope();
         var dispatcher = new OutboxDispatcher(scope.ServiceProvider.GetRequiredService<PlantDbContext>(),
-            new CloudDelivery(client, new StaticTokenProvider()), _clock, NullLogger<OutboxDispatcher>.Instance);
+            new CloudDelivery(client, tokenProvider ?? new StaticTokenProvider()), _clock,
+            NullLogger<OutboxDispatcher>.Instance);
         return await dispatcher.DispatchOneAsync(Settings, default);
     }
     private async Task<OutboxEntry> Entry(Guid id)
@@ -310,5 +345,16 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
         private DateTimeOffset _now = DateTimeOffset.UtcNow;
         public override DateTimeOffset GetUtcNow() => _now;
         public void Advance(TimeSpan time) => _now += time;
+    }
+
+    private sealed class RecoveringTokenProvider : IGatewayTokenProvider
+    {
+        public bool Available { get; set; }
+
+        public Task<GatewayTokenResult> GetAsync(CancellationToken cancellationToken) => Task.FromResult(
+            Available ? GatewayTokenResult.Success("recovered-token") :
+            GatewayTokenResult.Failure("identity_connection_failed"));
+
+        public void Invalidate(string accessToken) { }
     }
 }
