@@ -462,10 +462,14 @@ The durable retry implementation remains intact: cloud and identity outages keep
 The identity-outage recovery test can be repeated safely with an isolated disposable PostgreSQL container and simulated identity availability:
 
 ```powershell
-dotnet test apps/edge/Laundry.Edge.Tests --filter "FullyQualifiedName~IdentityOutageRetainsEventUntilRecovery"
+dotnet test apps/edge/Laundry.Edge.Tests --filter "FullyQualifiedName~IdentityFailureRetainsEventUntilRecovery"
 ```
 
 Live verification on 2026-09-13 also stopped the actual Keycloak container before a fresh gateway requested a token. Gateway readiness remained healthy, a synthetic scan was accepted locally and stayed pending with `identity_connection_failed`, and the same stored event synchronized automatically after Keycloak restarted. No database volume was removed.
+
+A separate live test resolved and temporarily disabled only Keycloak's `service-account-gateway-development` account before a fresh gateway had obtained a token. Token issuance returned 401, gateway readiness and local acceptance remained healthy, and the event stayed pending with `identity_credentials_rejected`. Re-enabling that exact account drained the unchanged event automatically; the standard gateway identity test passed afterward. The test used a guaranteed restoration block and did not change the client secret, realm mappings, or database volumes.
+
+Disabling the account prevents **new** tokens. A signed token that was already cached can remain accepted until it expires—currently no more than five minutes—because the cloud validates it locally rather than asking Keycloak about every request. This bounded delay preserves availability and avoids making every scan depend on a live identity lookup. Production revocation timing must be agreed explicitly; do not describe account disablement as instantaneous revocation.
 
 Run the cross-component test with Docker available:
 

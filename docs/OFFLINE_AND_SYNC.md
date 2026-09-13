@@ -6,7 +6,7 @@ Normal receiving, production, packing, and dispatch scans must continue when int
 
 ## Storage layers
 
-The user-approved initial secure-slice policy allows enrolled sources with locally valid credentials to continue raw scans during internet/cloud identity outages. Gateway-to-cloud identity is now implemented for loopback Development: a Keycloak outage leaves durable outbox events pending while local acceptance continues. New station enrollment and privilege grants still require online authorization initially, as does supervisor replay reauthentication. Central revocation cannot be learned instantly while disconnected. The broader policy is not yet complete; see [ADRs 0009](decisions/0009-identity-permissions-and-offline-access.md) and [0013](decisions/0013-gateway-acquires-short-lived-tokens.md).
+The user-approved initial secure-slice policy allows enrolled sources with locally valid credentials to continue raw scans during internet/cloud identity outages. Gateway-to-cloud identity is now implemented for loopback Development: a Keycloak outage or disabled gateway account leaves durable outbox events pending while local acceptance continues. New station enrollment and privilege grants still require online authorization initially, as does supervisor replay reauthentication. Disabling an account prevents new tokens; an already-issued signed token remains valid until its five-minute expiry, so central revocation is bounded rather than instant. The broader policy is not yet complete; see [ADRs 0009](decisions/0009-identity-permissions-and-offline-access.md) and [0013](decisions/0013-gateway-acquires-short-lived-tokens.md).
 
 1. **PWA IndexedDB queue:** temporary protection when a station cannot reach the gateway.
 2. **Plant PostgreSQL:** durable store for locally accepted operational events and the subset of reference data needed to operate.
@@ -85,6 +85,7 @@ Use scoped incremental synchronization and tombstones for removals. Avoid copyin
 
 - Internet disappears before, during, and after scan acknowledgement.
 - Identity provider is unavailable before token acquisition; local acceptance continues and queued events synchronize unchanged after recovery.
+- Gateway identity is disabled before token acquisition; no cloud delivery occurs, local evidence remains pending, and recovery preserves the event ID and payload.
 - Cloud accepts an event but the response is lost.
 - Gateway restarts with pending outbox events.
 - PWA closes with queued IndexedDB events.

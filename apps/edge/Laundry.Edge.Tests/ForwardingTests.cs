@@ -191,8 +191,10 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
         Assert.False(await Dispatch(client));
     }
 
-    [Fact]
-    public async Task IdentityOutageRetainsEventUntilRecovery_WithoutCallingCloudEarly()
+    [Theory]
+    [InlineData("identity_connection_failed")]
+    [InlineData("identity_credentials_rejected")]
+    public async Task IdentityFailureRetainsEventUntilRecovery_WithoutCallingCloudEarly(string identityFailure)
     {
         var scan = await Seed();
         var cloudCalls = 0;
@@ -203,12 +205,12 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
             deliveredPayload = await request.Content!.ReadAsStringAsync(token);
             return CloudDeliveryTests.Receipt(scan.EventId);
         }));
-        var identity = new RecoveringTokenProvider();
+        var identity = new RecoveringTokenProvider(identityFailure);
 
         Assert.True(await Dispatch(client, identity));
         var pending = await Entry(scan.EventId);
         Assert.Equal("pending", pending.Status);
-        Assert.Equal("identity_connection_failed", pending.LastError);
+        Assert.Equal(identityFailure, pending.LastError);
         Assert.Equal(1, pending.Attempts);
         Assert.Null(pending.CloudReceivedAtUtc);
         Assert.Equal(0, cloudCalls);
@@ -347,13 +349,13 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
         public void Advance(TimeSpan time) => _now += time;
     }
 
-    private sealed class RecoveringTokenProvider : IGatewayTokenProvider
+    private sealed class RecoveringTokenProvider(string failure) : IGatewayTokenProvider
     {
         public bool Available { get; set; }
 
         public Task<GatewayTokenResult> GetAsync(CancellationToken cancellationToken) => Task.FromResult(
             Available ? GatewayTokenResult.Success("recovered-token") :
-            GatewayTokenResult.Failure("identity_connection_failed"));
+            GatewayTokenResult.Failure(failure));
 
         public void Invalidate(string accessToken) { }
     }
