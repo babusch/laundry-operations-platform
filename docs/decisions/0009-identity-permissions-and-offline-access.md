@@ -5,6 +5,8 @@ Date: 2026-09-08
 
 Review update (2026-09-08): the user approved the offline-access policy below. Identity mechanisms, provider selection, and implementation details remain under review; this is not approval to implement the entire proposal.
 
+Implementation update (2026-09-09): ADRs 0010–0012 establish local Keycloak, a development gateway identity, and cloud-side JWT validation. The gateway does not yet acquire tokens, and production provider/credentials remain undecided.
+
 ## Context
 
 Checkpoint 5 replaces local-development trust with authenticated communication. Existing scan durability, immutable payloads, tenant/plant isolation, and idempotent delivery must remain unchanged. An internet or cloud identity-service outage must not become a per-scan dependency. This proposal does not supersede ADRs 0004/0006/0007/0008 until reviewed and implemented in explicit small steps.

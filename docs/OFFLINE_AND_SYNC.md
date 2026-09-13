@@ -45,7 +45,7 @@ The Development-only forwarding worker delivers stored JSON to the local cloud A
 
 Local `/api/sync` diagnostics expose scoped counts, oldest pending age, safe per-event metadata, and replay audit history. A reviewed needs-attention event can be requeued with an idempotent request ID and expected attempt count, committing audit plus queue change atomically without modifying the scan. No remote or authenticated administration is enabled yet. See [ADR 0008](decisions/0008-local-sync-diagnostics-and-audited-replay.md).
 
-The first implemented boundary is `POST /api/scans`, restricted to local Development use. It validates the shared v1 contract, checks server-configured tenant/plant scope, inserts atomically, and distinguishes unchanged retries from conflicting payloads. Original JSON is retained alongside relational fields. See [ADR 0004](decisions/0004-bootstrap-local-scan-ingestion.md) for limits; authenticated remote gateway ingestion remains a later checkpoint.
+Cloud `POST /api/scans` remains restricted to loopback Development use, but now requires a signed, unexpired gateway token for the cloud API audience and `scans.ingest` permission. Tenant/plant registration comes from verified token claims and must match the event before storage. Original JSON and idempotent behavior remain unchanged. See [ADR 0012](decisions/0012-cloud-validates-gateway-tokens.md). Gateway token acquisition and authenticated remote production ingestion remain later work.
 
 - Assume at-least-once delivery, not exactly-once transport.
 - Make processing effectively once through idempotency and uniqueness constraints.

@@ -61,7 +61,7 @@ docker compose -f docker-compose.identity.yml logs --tail 30 keycloak
 
 The test checks discovery metadata and public signing keys over normally validated HTTPS. If startup is still in progress, wait briefly and repeat. A passing test does not yet prove gateway token issuance or authorization.
 
-Open [local Keycloak administration](https://localhost:8443/admin/) and sign in as `local-admin` with the bootstrap password you chose. Do not enter real employee/customer accounts. Do not create a gateway client yet; that is the next slice.
+Open [local Keycloak administration](https://localhost:8443/admin/) and sign in as `local-admin` with the bootstrap password you chose. Do not enter real employee/customer accounts. The development gateway client and its claims are managed by the checked-in realm configuration and initializer; avoid changing them manually because rerunning the initializer restores the documented configuration.
 
 Verified on 2026-09-09: trusted HTTPS discovery, signing-key publication, and interactive `local-admin` login all succeeded.
 

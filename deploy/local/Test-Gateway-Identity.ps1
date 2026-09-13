@@ -3,8 +3,8 @@ $ErrorActionPreference = 'Stop'
 $issuer = 'https://localhost:8443/realms/laundry-development'
 $clientId = 'gateway-development'
 $expectedAudience = 'laundry-cloud-api'
-$expectedTenant = '11111111-1111-1111-1111-111111111111'
-$expectedPlant = '22222222-2222-2222-2222-222222222222'
+$expectedTenant = '11111111-1111-4111-8111-111111111111'
+$expectedPlant = '22222222-2222-4222-8222-222222222222'
 
 $composeJson = docker compose -f docker-compose.identity.yml config --format json
 if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the local identity configuration.' }
@@ -47,6 +47,7 @@ if ($claims.azp -cne $clientId -and $claims.client_id -cne $clientId) { throw 'T
 if ($claims.tenant_id -cne $expectedTenant -or $claims.plant_id -cne $expectedPlant) { throw 'Token plant registration is incorrect.' }
 if ($expectedAudience -notin @($claims.aud)) { throw 'Token is not intended for the cloud API.' }
 if ('scans.ingest' -notin @($claims.realm_access.roles)) { throw 'Gateway lacks scans.ingest permission.' }
+if ($claims.laundry_permissions -cne 'scans.ingest') { throw 'Gateway permission claim is incorrect.' }
 $applicationRoles = @($claims.realm_access.roles | Where-Object { $_ -match '\.' })
 if ($applicationRoles.Count -ne 1 -or $applicationRoles[0] -cne 'scans.ingest') {
     throw 'Gateway has an unexpected application permission.'

@@ -1,4 +1,5 @@
 using Laundry.Api.Integrations.Scans;
+using Laundry.Api.Security;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<ScanContractValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddGatewayAuthentication(builder.Configuration);
 builder.Services.AddDbContext<ScanDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Laundry")
         ?? throw new InvalidOperationException("Configure ConnectionStrings:Laundry before using the database.")));
@@ -14,16 +16,12 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanIngestion:Enabled"))
 {
-    var tenantId = app.Configuration.GetValue<Guid>("ScanIngestion:TenantId");
-    var plantId = app.Configuration.GetValue<Guid>("ScanIngestion:PlantId");
-    if (tenantId == Guid.Empty || plantId == Guid.Empty)
-    {
-        throw new InvalidOperationException("Configure the development scan tenant and plant.");
-    }
-
-    app.MapScanIngestion(new DevelopmentScanScope(tenantId, plantId));
+    app.MapScanIngestion();
 }
 
 app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });

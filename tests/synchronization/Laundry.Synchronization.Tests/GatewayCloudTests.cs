@@ -2,15 +2,20 @@ extern alias cloud;
 
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
+using System.Text.Encodings.Web;
 using System.Text.Json.Nodes;
 using Laundry.Edge.Persistence;
 using Laundry.Edge.Synchronization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 using CloudProgram = cloud::Program;
 using CloudDbContext = cloud::Laundry.Api.Integrations.Scans.ScanDbContext;
@@ -31,7 +36,17 @@ public sealed class GatewayCloudTests
             builder.UseEnvironment("Development");
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
                 { ["ConnectionStrings:Laundry"] = cloudDb.GetConnectionString() }));
-            builder.ConfigureServices(services => services.AddSingleton<IStartupFilter, Loopback>());
+            builder.ConfigureServices(services =>
+            {
+                services.AddSingleton<IStartupFilter, Loopback>();
+                services.AddAuthentication(options =>
+                    {
+                        options.DefaultAuthenticateScheme = SynchronizationTestAuthentication.SchemeName;
+                        options.DefaultChallengeScheme = SynchronizationTestAuthentication.SchemeName;
+                    })
+                    .AddScheme<AuthenticationSchemeOptions, SynchronizationTestAuthentication>(
+                        SynchronizationTestAuthentication.SchemeName, _ => { });
+            });
         });
         using (var scope = cloudApp.Services.CreateScope())
             await scope.ServiceProvider.GetRequiredService<CloudDbContext>().Database.MigrateAsync();
@@ -169,5 +184,26 @@ public sealed class GatewayCloudTests
             });
             next(app);
         };
+    }
+
+    private sealed class SynchronizationTestAuthentication(
+        IOptionsMonitor<AuthenticationSchemeOptions> options,
+        ILoggerFactory logger,
+        UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    {
+        public const string SchemeName = "SynchronizationTest";
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            Claim[] claims =
+            [
+                new("client_id", "gateway-synchronization-test"),
+                new("tenant_id", "11111111-1111-4111-8111-111111111111"),
+                new("plant_id", "22222222-2222-4222-8222-222222222222"),
+                new("laundry_permissions", "scans.ingest")
+            ];
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
+            return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
+        }
     }
 }

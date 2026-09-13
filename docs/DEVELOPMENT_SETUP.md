@@ -182,10 +182,10 @@ Start the API:
 dotnet run --project apps/cloud/Laundry.Api
 ```
 
-While it is running, open `http://localhost:5100/health` in a browser or check it from another PowerShell window:
+While it is running, open `https://localhost:7100/health` in a browser or check it from another PowerShell window:
 
 ```powershell
-Invoke-RestMethod http://localhost:5100/health
+Invoke-RestMethod https://localhost:7100/health
 ```
 
 The response should be `Healthy`. Return to the API terminal and press **Ctrl+C** to stop it. PostgreSQL does not need to be running for this basic process health check.
@@ -208,7 +208,7 @@ The commands perform these steps:
 2. Install the repository-pinned `dotnet-ef` tool, used to manage database migrations.
 3. Download the .NET packages, including EF Core and the Npgsql PostgreSQL provider.
 4. Apply pending migrations to the local database. A migration is a version-controlled description of a database structure change. EF records applied migrations in its history table, so repeating this command preserves existing data and applies only pending changes.
-5. Start the API on this computer at `http://localhost:5100`.
+5. Start the API on this computer at `https://localhost:7100` using the trusted development certificate prepared for local identity setup.
 
 The API's Development configuration contains a connection string matching the Compose defaults:
 
@@ -227,7 +227,7 @@ Compose reads `.env`, but ASP.NET Core does not read that file automatically. If
 In a second terminal, verify the API can reach the database:
 
 ```powershell
-Invoke-RestMethod http://localhost:5100/health/ready
+Invoke-RestMethod https://localhost:7100/health/ready
 ```
 
 Expect `Healthy`. If PostgreSQL stops, readiness returns HTTP 503 (`Unhealthy`) while `/health` still returns HTTP 200. Readiness currently checks connectivity only; it does not prove migrations are current.
@@ -276,36 +276,36 @@ Run `dotnet tool restore` after cloning the repository or when its tool versions
 
 `global.json` selects the .NET SDK that builds the code. The `.csproj` files list application and test dependencies. The tool manifest separately selects development commands such as the migration tool.
 
-## Submit a simulated scan
+## Submit an authenticated simulated scan to the cloud
 
-With Docker running, apply pending migrations before starting the API:
+Complete [local identity setup](LOCAL_IDENTITY_SETUP.md) first. With Docker running, apply pending migrations before starting the API:
 
 ```powershell
 dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
 dotnet run --project apps/cloud/Laundry.Api
 ```
 
-In another terminal at the repository root:
+In another terminal at the repository root, run the non-disclosing authentication smoke test:
 
 ```powershell
-$scanJson = Get-Content packages/contracts/examples/scan-observed.v1.barcode.json -Raw
-Invoke-RestMethod -Method Post -Uri http://localhost:5100/api/scans -ContentType application/json -Body $scanJson
+./deploy/local/Test-Cloud-Gateway-Authentication.ps1
 ```
 
-The response contains `eventId`, `status`, and `cloudReceivedAtUtc`. Repeat the same command to see `alreadyProcessed`. The cloud receipt timestamp remains unchanged.
+The script obtains a short-lived gateway token without printing it. It verifies 401 without credentials, 403 for a different plant, 201 for a permitted observation, and 200 with the unchanged original receipt on retry. It prints no credential, token, or scan identifier.
 
 | HTTP status | Meaning |
 |---|---|
 | 201 | A new observation was durably stored; status is `accepted` |
 | 200 | The same ID and payload were already stored; status is `alreadyProcessed` |
+| 401 | Gateway token is missing, invalid, expired, or intended for another issuer/API |
 | 400 | Invalid JSON, contract violation, or unsupported storage representation |
-| 403 | Request is not local or its tenant/plant differs from server configuration |
+| 403 | Authenticated gateway lacks permission, has invalid registration claims, is not local in this development slice, or its tenant/plant differs from the event |
 | 409 | ID conflicts with an existing observation; nothing is overwritten |
 | 413 | Body exceeds 16 KiB |
 | 415 | Body is not JSON |
 | 503 | Storage unavailable; retain the event and retry unchanged (`Retry-After: 5`) |
 
-The route is enabled only in Development with `ScanIngestion:Enabled`. Its server-configured tenant and plant match the synthetic examples. It accepts loopback connections only; it is not a production authentication mechanism. In Staging and Production the route returns 404 even if the configuration flag is set.
+The route is enabled only in Development with `ScanIngestion:Enabled` and accepts loopback connections only. ASP.NET Core validates Keycloak signature metadata, issuer, `laundry-cloud-api` audience, expiry, and the `scans.ingest` permission. Verified token claims supply the registered tenant/plant and must match the event. In Staging and Production the route still returns 404 even if the flag is set; production gateway access is not enabled.
 
 UUIDs and timestamps are checked against the embedded JSON Schema. Unknown item identifiers are accepted without item resolution. The accepted payload is immutable: changing any field while reusing its ID produces a conflict. JSON property order and insignificant whitespace do not matter. Existing rows from before payload preservation return 409 on replay because exact equality cannot be established.
 
@@ -315,7 +315,7 @@ The ingestion tests exercise the real HTTP boundary against isolated PostgreSQL 
 
 ## Run the local gateway
 
-The gateway provides health checks, durable local scan acceptance, and background outbox forwarding. The cloud API does not need to run for local acceptance; delivery waits and retries when the cloud is unavailable. Development forwarding is enabled by default.
+The gateway provides health checks, durable local scan acceptance, and background outbox forwarding. The cloud API does not need to run for local acceptance. Development forwarding now defaults to disabled while cloud authentication is protected but gateway token acquisition is not yet implemented; accepted events remain durable locally.
 
 With Docker Desktop running, open a terminal at the repository root:
 
@@ -407,30 +407,11 @@ $submission = $newScan | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
 ```
 
-## Forward gateway scans to the local cloud
+## Gateway forwarding status during authentication work
 
-Run all commands from the repository root. First start both databases and apply migrations explicitly, with applications stopped:
+Checkpoint 3 proved restart-safe forwarding, outages, and lost acknowledgements before authentication. Cloud ingestion is now protected, while gateway token acquisition is the next slice. Therefore development forwarding temporarily defaults off. A scan submitted to the gateway is accepted and remains `pending`; do not expect live synchronization yet.
 
-```powershell
-docker compose up --detach --wait
-dotnet tool restore
-dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
-dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Development
-```
-
-The new gateway migration adds delivery-tracking columns to existing outbox rows without deleting pending scans. Start the cloud in one terminal:
-
-```powershell
-dotnet run --project apps/cloud/Laundry.Api
-```
-
-Start the gateway in another:
-
-```powershell
-dotnet run --project apps/edge/Laundry.Edge
-```
-
-Submit a fresh synthetic scan using the gateway instructions above. Its local receipt does not wait for the cloud. Within a few seconds, inspect delivery state:
+Inspect delivery state without printing payloads:
 
 ```powershell
 docker compose exec plant-postgres psql --username laundry_edge --dbname laundry_plant --command 'SELECT event_id, status, attempts, next_attempt_at_utc, cloud_received_at_utc, last_error FROM plant.outbox;'
@@ -442,26 +423,9 @@ docker compose exec plant-postgres psql --username laundry_edge --dbname laundry
 | `synchronized` | Cloud returned a validated receipt for this event; its receipt time is saved. |
 | `needsAttention` | Cloud rejected the request or configuration/access needs intervention; the event is retained. |
 
-To try an outage, stop only the cloud API using **Ctrl+C** in its terminal, leaving gateway and plant database running. Submit a new scan: it is still accepted locally and remains pending. Restart the cloud API; the gateway retries automatically. Delays start around 4–5 seconds and grow up to 4–5 minutes, with server retry hints also respected. Do not expect immediate delivery after a prolonged outage.
+`Forwarding:Endpoint` still contains the previous `http://127.0.0.1:5100/api/scans` development value, but `Forwarding:Enabled` defaults to false. Do not enable it against the protected cloud endpoint: it cannot attach a token or use the new HTTPS endpoint yet. The next security slice will change both together. The worker never runs outside Development.
 
-Restarting the gateway preserves pending rows and their retry schedule. An attempt interrupted mid-delivery can wait for its 30-second lease to expire before replay. If the cloud had already saved it, the replay is recognized instead of inserting a duplicate. Gateway readiness remains about local database connectivity, not cloud reachability or queue health.
-
-`Forwarding:Endpoint` defaults to `http://127.0.0.1:5100/api/scans`. Only literal loopback HTTP IP endpoints are allowed; redirects and proxies are disabled. The worker never runs outside Development, even if enabled. This is not authenticated remote gateway support.
-
-To temporarily keep scans local, set this in the gateway terminal before starting it:
-
-```powershell
-$env:Forwarding__Enabled = 'false'
-dotnet run --project apps/edge/Laundry.Edge
-```
-
-After stopping that process, remove the override to restore the Development default:
-
-```powershell
-Remove-Item Env:Forwarding__Enabled
-```
-
-HTTP 408/429/5xx, connection failures, timeouts, and invalid receipts are retried. Other responses become `needsAttention`, including 401/403/404/409. Check both apps' configuration and safe error codes; do not edit original events or change event IDs to bypass conflicts. Use the local audited replay interface below only after reviewing the failure.
+The durable retry implementation remains intact: transient failures wait, permanent event/configuration responses become `needsAttention`, and restart retains the queue. The cross-component test below uses an explicit test identity to keep those synchronization guarantees covered until the real gateway sender is connected.
 
 Run the cross-component test with Docker available:
 

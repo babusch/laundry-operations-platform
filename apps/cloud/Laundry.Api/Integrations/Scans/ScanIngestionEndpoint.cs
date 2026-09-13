@@ -1,40 +1,47 @@
 using System.Net;
 using System.Text.Json;
+using Laundry.Api.Security;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace Laundry.Api.Integrations.Scans;
 
-public sealed record DevelopmentScanScope(Guid TenantId, Guid PlantId);
 public sealed record ScanReceipt(Guid EventId, string Status, DateTimeOffset CloudReceivedAtUtc);
 
 public static class ScanIngestionEndpoint
 {
-    public static void MapScanIngestion(this WebApplication app, DevelopmentScanScope source)
+    public static void MapScanIngestion(this WebApplication app)
     {
         app.MapPost("/api/scans", (HttpContext http, ScanContractValidator validator,
             ScanDbContext database, TimeProvider clock, ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
-            AcceptAsync(http, validator, database, clock, loggerFactory, source, cancellationToken))
+            AcceptAsync(http, validator, database, clock, loggerFactory, cancellationToken))
             .WithName("ObserveScan")
             .Accepts<JsonElement>("application/json")
             .Produces<ScanReceipt>(StatusCodes.Status201Created)
             .Produces<ScanReceipt>()
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status403Forbidden)
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status413PayloadTooLarge)
             .ProducesProblem(StatusCodes.Status415UnsupportedMediaType)
-            .ProducesProblem(StatusCodes.Status503ServiceUnavailable);
+            .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
+            .RequireAuthorization(GatewayAuthorization.Policy);
     }
 
     private static async Task<IResult> AcceptAsync(HttpContext http, ScanContractValidator validator,
         ScanDbContext database, TimeProvider clock, ILoggerFactory loggerFactory,
-        DevelopmentScanScope source, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         if (http.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address))
         {
             return Results.Problem(statusCode: 403, title: "Local development access only.");
+        }
+
+        if (!GatewayScope.TryRead(http.User, out var source))
+        {
+            return Results.Problem(statusCode: 403, title: "Gateway registration is incomplete.");
         }
 
         if (!http.Request.HasJsonContentType())
@@ -69,7 +76,7 @@ public static class ScanIngestionEndpoint
                 return InvalidScan();
             }
 
-            if (json.GetProperty("tenantId").GetGuid() != source.TenantId ||
+            if (json.GetProperty("tenantId").GetGuid() != source!.TenantId ||
                 json.GetProperty("plantId").GetGuid() != source.PlantId)
             {
                 return Results.Problem(statusCode: 403, title: "Scan source is outside the permitted tenant or plant.");
