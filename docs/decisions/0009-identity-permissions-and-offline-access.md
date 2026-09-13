@@ -92,3 +92,5 @@ Update: the user approved product-managed identity and local Keycloak evaluation
 ## Consequences and revisit triggers
 
 Machine identity is separate from human audit attribution; a cloud authentication outage cannot discard local evidence. Operating trusted offline sources necessarily permits delayed knowledge of central revocation. If workflow or risk requirements demand immediate revocation, revisit the offline availability promise explicitly instead of silently violating it.
+
+Implementation update: ADRs 0010–0013 now prove local Keycloak, a scoped Development gateway identity, cloud token validation, and gateway acquisition/caching of short-lived tokens. Station authentication, attributed supervisor replay, production identity hosting, and production credential lifecycle remain later slices.

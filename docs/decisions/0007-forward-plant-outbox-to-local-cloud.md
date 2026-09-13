@@ -30,3 +30,5 @@ Tests use real PostgreSQL for leases, rollback, and delivery state. A cross-comp
 ## Revisit when
 
 Authenticated networking, throughput measurements, supported upgrades, or operational diagnostics require extending this deliberately local-development delivery boundary.
+
+Implementation update: ADRs 0012–0013 replace the unauthenticated HTTP sender with loopback HTTPS, cloud token validation, and gateway client-credentials token acquisition. The durable delivery and event-specific response rules remain in force; identity acquisition failures remain pending as system-level outages.

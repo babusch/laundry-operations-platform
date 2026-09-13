@@ -17,6 +17,7 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0010 — Local Keycloak development service](0010-local-keycloak-development.md)
 - [0011 — Reproducible development gateway identity](0011-development-gateway-identity.md)
 - [0012 — Cloud validates development gateway tokens](0012-cloud-validates-gateway-tokens.md)
+- [0013 — Gateway acquires short-lived development tokens](0013-gateway-acquires-short-lived-tokens.md)
 
 ## Template
 

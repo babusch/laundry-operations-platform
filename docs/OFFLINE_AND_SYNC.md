@@ -6,7 +6,7 @@ Normal receiving, production, packing, and dispatch scans must continue when int
 
 ## Storage layers
 
-The user-approved initial secure-slice policy allows enrolled sources with locally valid credentials to continue raw scans during internet/cloud identity outages. New enrollment and privilege grants require online authorization initially, as does supervisor replay reauthentication. Central revocation cannot be learned instantly while disconnected. This policy is not yet implemented; see [ADR 0009](decisions/0009-identity-permissions-and-offline-access.md) for boundaries and unresolved credential-lifetime/deployment details.
+The user-approved initial secure-slice policy allows enrolled sources with locally valid credentials to continue raw scans during internet/cloud identity outages. Gateway-to-cloud identity is now implemented for loopback Development: a Keycloak outage leaves durable outbox events pending while local acceptance continues. New station enrollment and privilege grants still require online authorization initially, as does supervisor replay reauthentication. Central revocation cannot be learned instantly while disconnected. The broader policy is not yet complete; see [ADRs 0009](decisions/0009-identity-permissions-and-offline-access.md) and [0013](decisions/0013-gateway-acquires-short-lived-tokens.md).
 
 1. **PWA IndexedDB queue:** temporary protection when a station cannot reach the gateway.
 2. **Plant PostgreSQL:** durable store for locally accepted operational events and the subset of reference data needed to operate.

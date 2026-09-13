@@ -31,7 +31,7 @@ public sealed class CloudDeliveryTests
     {
         var id = Guid.NewGuid();
         using var client = new HttpClient(new StubHandler((_, _) => Task.FromResult(Receipt(id, code, status))));
-        var result = await new CloudDelivery(client).SendAsync(new("http://127.0.0.1/api/scans"), id, "{}", default);
+        var result = await Delivery(client).SendAsync(new("https://localhost/api/scans"), id, "{}", default);
         Assert.Equal(expected, result.Status);
     }
 
@@ -44,8 +44,8 @@ public sealed class CloudDeliveryTests
             mismatchedJson })
         {
             using var client = new HttpClient(new StubHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Created)
-                { Content = new StringContent(content) })));
-            var result = await new CloudDelivery(client).SendAsync(new("http://127.0.0.1/api/scans"), Guid.NewGuid(), "{}", default);
+            { Content = new StringContent(content) })));
+            var result = await Delivery(client).SendAsync(new("https://localhost/api/scans"), Guid.NewGuid(), "{}", default);
             Assert.Equal("pending", result.Status);
             Assert.Equal("invalid_receipt", result.Error);
         }
@@ -60,35 +60,97 @@ public sealed class CloudDeliveryTests
             response.Headers.RetryAfter = new(TimeSpan.FromSeconds(90));
             return Task.FromResult(response);
         }));
-        var result = await new CloudDelivery(client).SendAsync(new("http://127.0.0.1/api/scans"), Guid.NewGuid(), "{}", default);
+        var result = await Delivery(client).SendAsync(new("https://localhost/api/scans"), Guid.NewGuid(), "{}", default);
         Assert.Equal(TimeSpan.FromSeconds(90), result.RetryAfter);
         Assert.True(OutboxDispatcher.RetryDelay(1, result.RetryAfter) >= TimeSpan.FromSeconds(90));
         Assert.InRange(OutboxDispatcher.RetryDelay(1000, null).TotalSeconds, 240, 300);
         using var lost = new HttpClient(new StubHandler((_, _) => throw new HttpRequestException("simulated loss")));
-        Assert.Equal("pending", (await new CloudDelivery(lost).SendAsync(new("http://127.0.0.1/api/scans"), Guid.NewGuid(), "{}", default)).Status);
+        Assert.Equal("pending", (await Delivery(lost).SendAsync(new("https://localhost/api/scans"), Guid.NewGuid(), "{}", default)).Status);
     }
 
     [Theory]
-    [InlineData("http://example.com/api/scans")]
-    [InlineData("http://127.0.0.1/api/scans?target=remote")]
-    [InlineData("https://127.0.0.1/api/scans")]
-    [InlineData("http://user:password@127.0.0.1/api/scans")]
+    [InlineData("http://localhost/api/scans")]
+    [InlineData("https://example.com/api/scans")]
+    [InlineData("https://localhost/api/scans?target=remote")]
+    [InlineData("https://user:password@localhost/api/scans")]
     public void UnsafeEndpointConfigurationIsRejected(string endpoint)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-            { ["Forwarding:Endpoint"] = endpoint }).Build();
+        { ["Forwarding:Endpoint"] = endpoint }).Build();
         Assert.Throws<InvalidOperationException>(() => ForwardingSettings.Read(configuration));
+    }
+
+    [Fact]
+    public async Task BearerTokenIsAttached_AndUnauthorizedTokenIsRefreshedOnce()
+    {
+        var id = Guid.NewGuid();
+        var authorizations = new List<string?>();
+        using var client = new HttpClient(new StubHandler((request, _) =>
+        {
+            authorizations.Add(request.Headers.Authorization?.ToString());
+            return Task.FromResult(authorizations.Count == 1
+                ? new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                : Receipt(id));
+        }));
+        var tokens = new RotatingTokenProvider();
+        var result = await new CloudDelivery(client, tokens)
+            .SendAsync(new("https://localhost/api/scans"), id, "{}", default);
+
+        Assert.Equal("synchronized", result.Status);
+        Assert.Equal(["Bearer token-1", "Bearer token-2"], authorizations);
+        Assert.Equal("token-1", tokens.Invalidated);
+        Assert.Equal(2, tokens.Requests);
+    }
+
+    [Fact]
+    public async Task IdentityFailureKeepsEventPending_WithoutCallingCloud()
+    {
+        using var client = new HttpClient(new StubHandler((_, _) =>
+            throw new Xunit.Sdk.XunitException("Cloud must not be called")));
+        var result = await new CloudDelivery(client, new FailedTokenProvider())
+            .SendAsync(new("https://localhost/api/scans"), Guid.NewGuid(), "{}", default);
+        Assert.Equal("pending", result.Status);
+        Assert.Equal("identity_connection_failed", result.Error);
     }
 
     internal static HttpResponseMessage Receipt(Guid id, int code = 201, string status = "accepted") => new((HttpStatusCode)code)
     {
         Content = JsonContent.Create(new { eventId = id, status, cloudReceivedAtUtc = DateTimeOffset.UtcNow })
     };
+
+    private static CloudDelivery Delivery(HttpClient client) => new(client, new StaticTokenProvider());
 }
 
 internal sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => send(request, cancellationToken);
+}
+
+internal sealed class StaticTokenProvider : IGatewayTokenProvider
+{
+    public Task<GatewayTokenResult> GetAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(GatewayTokenResult.Success("test-token"));
+
+    public void Invalidate(string accessToken) { }
+}
+
+internal sealed class FailedTokenProvider : IGatewayTokenProvider
+{
+    public Task<GatewayTokenResult> GetAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(GatewayTokenResult.Failure("identity_connection_failed"));
+
+    public void Invalidate(string accessToken) { }
+}
+
+internal sealed class RotatingTokenProvider : IGatewayTokenProvider
+{
+    public int Requests { get; private set; }
+    public string? Invalidated { get; private set; }
+
+    public Task<GatewayTokenResult> GetAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(GatewayTokenResult.Success($"token-{++Requests}"));
+
+    public void Invalidate(string accessToken) => Invalidated = accessToken;
 }
 
 [Trait("Category", "Database")]
@@ -97,7 +159,7 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
     private readonly TestClock _clock = new();
     private readonly Guid _tenant = Guid.NewGuid();
     private readonly Guid _plant = Guid.NewGuid();
-    private ForwardingSettings Settings => new(new("http://127.0.0.1/api/scans"), _tenant, _plant);
+    private ForwardingSettings Settings => new(new("https://localhost/api/scans"), _tenant, _plant);
 
     [Fact]
     public async Task LostAcknowledgementAndRestartReplayExactPayloadAndPersistReceipt()
@@ -217,8 +279,12 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
         json["gatewayAcceptedAtUtc"] = _clock.GetUtcNow().UtcDateTime.ToString("O");
         var observation = new LocalObservation
         {
-            EventId = Guid.Parse(json["eventId"]!.GetValue<string>()), TenantId = tenant ?? _tenant, PlantId = plant ?? _plant,
-            AcceptedAtUtc = _clock.GetUtcNow(), SubmissionJson = submission, EventJson = json.ToJsonString()
+            EventId = Guid.Parse(json["eventId"]!.GetValue<string>()),
+            TenantId = tenant ?? _tenant,
+            PlantId = plant ?? _plant,
+            AcceptedAtUtc = _clock.GetUtcNow(),
+            SubmissionJson = submission,
+            EventJson = json.ToJsonString()
         };
         using var scope = fixture.Application.Services.CreateScope();
         var database = scope.ServiceProvider.GetRequiredService<PlantDbContext>();
@@ -231,7 +297,7 @@ public sealed class OutboxDispatchTests(AcceptanceFixture fixture) : IClassFixtu
     {
         using var scope = fixture.Application.Services.CreateScope();
         var dispatcher = new OutboxDispatcher(scope.ServiceProvider.GetRequiredService<PlantDbContext>(),
-            new CloudDelivery(client), _clock, NullLogger<OutboxDispatcher>.Instance);
+            new CloudDelivery(client, new StaticTokenProvider()), _clock, NullLogger<OutboxDispatcher>.Instance);
         return await dispatcher.DispatchOneAsync(Settings, default);
     }
     private async Task<OutboxEntry> Entry(Guid id)

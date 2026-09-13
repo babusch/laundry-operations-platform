@@ -16,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Testcontainers.PostgreSql;
 using CloudProgram = cloud::Program;
 using CloudDbContext = cloud::Laundry.Api.Integrations.Scans.ScanDbContext;
@@ -35,7 +36,7 @@ public sealed class GatewayCloudTests
         {
             builder.UseEnvironment("Development");
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
-                { ["ConnectionStrings:Laundry"] = cloudDb.GetConnectionString() }));
+            { ["ConnectionStrings:Laundry"] = cloudDb.GetConnectionString() }));
             builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IStartupFilter, Loopback>();
@@ -63,6 +64,8 @@ public sealed class GatewayCloudTests
             builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IStartupFilter, Loopback>();
+                services.RemoveAll<IGatewayTokenProvider>();
+                services.AddSingleton<IGatewayTokenProvider, SynchronizationTestTokenProvider>();
                 services.AddHttpClient<CloudDelivery>().ConfigurePrimaryHttpMessageHandler(() =>
                     new UnreliableNetwork(network) { InnerHandler = cloudApp.Server.CreateHandler() });
             });
@@ -205,5 +208,13 @@ public sealed class GatewayCloudTests
             var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, SchemeName));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));
         }
+    }
+
+    private sealed class SynchronizationTestTokenProvider : IGatewayTokenProvider
+    {
+        public Task<GatewayTokenResult> GetAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(GatewayTokenResult.Success("synchronization-test-token"));
+
+        public void Invalidate(string accessToken) { }
     }
 }

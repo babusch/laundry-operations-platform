@@ -56,7 +56,7 @@ Modules own their domain rules and persistence mappings. Cross-module changes us
 
 ## Plant gateway
 
-See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host, local health checks, transactional acceptance/outbox, and Development-only forwarding worker are implemented. The Development cloud endpoint now validates scoped Keycloak gateway tokens (ADR 0012), but gateway token acquisition remains the next slice and forwarding is disabled by default meanwhile. Authenticated remote production access remains planned.
+See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host, local health checks, transactional acceptance/outbox, and Development-only forwarding worker are implemented. The gateway acquires and caches short-lived Keycloak tokens and the cloud validates their permission and tenant/plant scope (ADRs 0012–0013). This remains a loopback-only development proof; remote production access and installation credential lifecycle remain planned.
 
 Run a gateway on a managed industrial PC or plant server. It:
 

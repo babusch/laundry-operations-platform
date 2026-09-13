@@ -1,7 +1,7 @@
 # Local gateway implementation plan
 
 Date: 2026-09-07  
-Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented; checkpoint 5 remains planned. Storage reasoning is recorded in [ADR 0005](decisions/0005-use-postgresql-for-plant-storage.md), acceptance in [ADR 0006](decisions/0006-durable-local-scan-acceptance.md), local forwarding in [ADR 0007](decisions/0007-forward-plant-outbox-to-local-cloud.md), and diagnostics/replay in [ADR 0008](decisions/0008-local-sync-diagnostics-and-audited-replay.md). See project status for current verification.
+Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented. Checkpoint 5 gateway-to-cloud identity is implemented for loopback Development; station-to-gateway security and production credential lifecycle remain planned. See project status and ADRs 0005–0013 for current decisions and verification.
 
 ## Purpose and boundaries
 
@@ -20,7 +20,7 @@ During development, run cloud and gateway applications on the same PC with separ
 | Plant storage | PostgreSQL, separate from cloud storage; see comparison below |
 | Persistence | EF Core, Npgsql, explicit migrations |
 | Message validation | Shared JSON Schema, JsonSchema.Net |
-| Transport | Local HTTP for loopback development; authenticated HTTPS before remote access |
+| Transport | Authenticated HTTPS for gateway-to-cloud Development; local station API remains HTTP/loopback pending its security slice |
 | Tests | xUnit, Testcontainers, synthetic observations |
 | Development dependencies | Root Docker Compose orchestration |
 | Diagnostics | Correlation-aware logs, health checks, delivery status; no sensitive payload logging |
@@ -108,7 +108,7 @@ Add migrations under gateway persistence when schema changes are introduced. Add
 
 ### 5. Secure network access
 
-- Add authenticated gateway-to-cloud identity and tenant/plant authorization.
+- Authenticated gateway-to-cloud identity and tenant/plant authorization are implemented for loopback Development.
 - Secure station-to-gateway access and local HTTPS before connecting separate machines.
 - Do not weaken ADR 0004's development-only boundary to bypass authentication.
 - Follow with operator PWA integration and selected hardware, as separately scoped checkpoints.

@@ -22,3 +22,5 @@ Missing, invalid, expired, wrong-issuer, and wrong-audience tokens return 401. A
 This does not complete checkpoint 5.2: the real gateway still does not obtain or attach a token, production-grade asymmetric credentials remain unresolved, and remote production ingestion remains disabled.
 
 References: [ASP.NET Core Minimal API security](https://learn.microsoft.com/aspnet/core/fundamentals/minimal-apis/security), [JWT bearer validation](https://learn.microsoft.com/aspnet/core/security/authentication/configure-jwt-bearer-authentication), and [Keycloak service accounts](https://www.keycloak.org/docs/latest/server_admin/#_service_accounts).
+
+Implementation update: ADR 0013 connects the Development gateway sender to this boundary with short-lived tokens while retaining the loopback-only restriction.

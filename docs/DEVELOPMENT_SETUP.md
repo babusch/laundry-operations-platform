@@ -315,7 +315,7 @@ The ingestion tests exercise the real HTTP boundary against isolated PostgreSQL 
 
 ## Run the local gateway
 
-The gateway provides health checks, durable local scan acceptance, and background outbox forwarding. The cloud API does not need to run for local acceptance. Development forwarding now defaults to disabled while cloud authentication is protected but gateway token acquisition is not yet implemented; accepted events remain durable locally.
+The gateway provides health checks, durable local scan acceptance, and authenticated background outbox forwarding. The cloud API and Keycloak do not need to run for local acceptance. Checked-in forwarding defaults to disabled so the basic gateway can start without a private credential or cloud dependency; accepted events remain durable locally.
 
 With Docker Desktop running, open a terminal at the repository root:
 
@@ -326,7 +326,7 @@ dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Deve
 dotnet run --project apps/edge/Laundry.Edge
 ```
 
-The first command starts only the plant database. `--detach` leaves the container running in the background; `--wait` waits for its health check. The next commands restore the repository's migration tool and apply the gateway's migration, creating `plant.observations` and `plant.outbox`. Repeating the migration command preserves data. The final command starts the gateway on `http://localhost:5200` and keeps that terminal occupied. Startup does not apply migrations automatically.
+The first command starts only the plant database. `--detach` leaves the container running in the background; `--wait` waits for its health check. The next commands restore the repository's migration tool and apply the gateway migrations, creating its durable observations, outbox, and replay audit. Repeating the migration command preserves data. The final command starts the gateway on `http://localhost:5200` with cloud forwarding off and keeps that terminal occupied. Startup does not apply migrations automatically.
 
 In another terminal:
 
@@ -385,7 +385,7 @@ $submission = Get-Content packages/contracts/examples/submit-scan.v1.barcode.jso
 Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
 ```
 
-Expect `status: acceptedLocally`, a gateway acceptance timestamp, and initially `deliveryStatus: pending`. Repeat the same command to see `alreadyAcceptedLocally` with the original timestamp and current recorded delivery status. Local acceptance means saved at the plant, not a business action approved. The RFID submission example works with the same default simulator scope.
+Expect `status: acceptedLocally`, a gateway acceptance timestamp, and `deliveryStatus: pending` when using ordinary gateway startup. Repeat the same command to see `alreadyAcceptedLocally` with the original timestamp and current recorded delivery status. When authenticated forwarding is enabled, the background worker may change the status to `synchronized` quickly. Local acceptance means saved at the plant, not a business action approved. The RFID submission example works with the same default simulator scope.
 
 The gateway transaction saves the scan plus an outbox entry (a durable to-do item for cloud delivery). If either write fails, neither commits. A background worker delivers stored events without changing their payloads and records confirmed cloud receipts. Application and database restarts preserve these records.
 
@@ -407,9 +407,41 @@ $submission = $newScan | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
 ```
 
-## Gateway forwarding status during authentication work
+## Run authenticated gateway-to-cloud forwarding
 
-Checkpoint 3 proved restart-safe forwarding, outages, and lost acknowledgements before authentication. Cloud ingestion is now protected, while gateway token acquisition is the next slice. Therefore development forwarding temporarily defaults off. A scan submitted to the gateway is accepted and remains `pending`; do not expect live synchronization yet.
+Complete [local identity setup](LOCAL_IDENTITY_SETUP.md) first. Start both databases and Keycloak, then apply the existing migrations:
+
+```powershell
+docker compose up --detach --wait postgres plant-postgres
+docker compose -f docker-compose.identity.yml up --detach --wait
+./deploy/local/Initialize-Gateway-Identity.ps1
+dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
+dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Development
+```
+
+Open a second terminal at the repository root and start the protected cloud API:
+
+```powershell
+dotnet run --project apps/cloud/Laundry.Api
+```
+
+Open a third terminal and start the gateway with authenticated forwarding:
+
+```powershell
+./deploy/local/Start-DevelopmentGateway.ps1
+```
+
+The helper asks Docker Compose to resolve the existing ignored `.env` configuration, passes only `GATEWAY_CLIENT_SECRET` to the gateway child process as `GatewayIdentity__ClientSecret`, and enables forwarding for that process. It does not print the value. The token is requested with the client-credentials grant, kept only in memory, shared between deliveries, and refreshed before expiration. Press **Ctrl+C** to stop the gateway; the helper removes or restores its temporary process settings.
+
+Do not replace the helper with a checked-in secret. Ordinary `dotnet run --project apps/edge/Laundry.Edge` remains useful when developing local acceptance without identity or cloud services.
+
+With all three services running, use a fourth terminal for the non-disclosing end-to-end test:
+
+```powershell
+./deploy/local/Test-Gateway-Authenticated-Forwarding.ps1
+```
+
+The script creates one synthetic observation, submits it to the gateway, and waits up to 30 seconds for a confirmed cloud receipt. It prints no credential, token, tag value, or generated scan identifier. A successful run adds that synthetic observation to both development databases.
 
 Inspect delivery state without printing payloads:
 
@@ -423,9 +455,9 @@ docker compose exec plant-postgres psql --username laundry_edge --dbname laundry
 | `synchronized` | Cloud returned a validated receipt for this event; its receipt time is saved. |
 | `needsAttention` | Cloud rejected the request or configuration/access needs intervention; the event is retained. |
 
-`Forwarding:Endpoint` still contains the previous `http://127.0.0.1:5100/api/scans` development value, but `Forwarding:Enabled` defaults to false. Do not enable it against the protected cloud endpoint: it cannot attach a token or use the new HTTPS endpoint yet. The next security slice will change both together. The worker never runs outside Development.
+`Forwarding:Endpoint` is `https://localhost:7100/api/scans` and the token endpoint is the local Keycloak HTTPS endpoint. Both are validated as loopback Development addresses; redirects and proxies are disabled. The worker never runs outside Development.
 
-The durable retry implementation remains intact: transient failures wait, permanent event/configuration responses become `needsAttention`, and restart retains the queue. The cross-component test below uses an explicit test identity to keep those synchronization guarantees covered until the real gateway sender is connected.
+The durable retry implementation remains intact: cloud and identity outages keep events `pending`, permanent event rejection becomes `needsAttention`, and restart retains the queue. If the cloud rejects a cached token with 401, the gateway invalidates it, requests a replacement, and retries once. Rejected gateway credentials remain pending with a safe diagnostic code so correcting system configuration can resume the queue without replaying every event manually.
 
 Run the cross-component test with Docker available:
 

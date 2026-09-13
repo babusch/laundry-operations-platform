@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
@@ -6,7 +8,7 @@ namespace Laundry.Edge.Synchronization;
 public sealed record DeliveryResult(string Status, string? Error = null,
     DateTimeOffset? CloudReceivedAtUtc = null, TimeSpan? RetryAfter = null);
 
-public sealed class CloudDelivery(HttpClient client)
+public sealed class CloudDelivery(HttpClient client, IGatewayTokenProvider tokens)
 {
     public async Task<DeliveryResult> SendAsync(Uri endpoint, Guid eventId, string payload, CancellationToken cancellationToken)
     {
@@ -14,21 +16,60 @@ public sealed class CloudDelivery(HttpClient client)
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+            var token = await tokens.GetAsync(timeout.Token);
+            if (!token.Succeeded) return new("pending", token.Error);
+
+            using var response = await SendAsync(endpoint, payload, token.AccessToken!, timeout.Token);
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
             {
-                Content = new StringContent(payload, Encoding.UTF8, "application/json")
-            };
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                tokens.Invalidate(token.AccessToken!);
+                var replacement = await tokens.GetAsync(timeout.Token);
+                if (!replacement.Succeeded) return new("pending", replacement.Error);
+                using var retry = await SendAsync(endpoint, payload, replacement.AccessToken!, timeout.Token);
+                return await ClassifyAsync(retry, eventId, timeout.Token);
+            }
+            return await ClassifyAsync(response, eventId, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new("pending", "timeout");
+        }
+        catch (Exception exception) when (exception is HttpRequestException or IOException)
+        {
+            return new("pending", "connection_failed");
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
+        {
+            return new("pending", "invalid_receipt");
+        }
+    }
+
+    private async Task<HttpResponseMessage> SendAsync(Uri endpoint, string payload, string accessToken,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+            Headers = { Authorization = new AuthenticationHeaderValue("Bearer", accessToken) }
+        };
+        return await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+    }
+
+    private static async Task<DeliveryResult> ClassifyAsync(HttpResponseMessage response, Guid eventId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
             var code = (int)response.StatusCode;
             if (code is 200 or 201)
             {
                 // Bound even chunked receipts; never trust status code alone as acknowledgement.
-                await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+                await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
                 var bytes = new byte[4097];
                 var count = 0;
                 while (count < bytes.Length)
                 {
-                    var read = await stream.ReadAsync(bytes.AsMemory(count), timeout.Token);
+                    var read = await stream.ReadAsync(bytes.AsMemory(count), cancellationToken);
                     if (read == 0) break;
                     count += read;
                 }
@@ -52,14 +93,6 @@ public sealed class CloudDelivery(HttpClient client)
             }
             // Do not repeatedly send permanent rejects, auth/config errors, or redirects.
             return new("needsAttention", $"http_{code}");
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return new("pending", "timeout");
-        }
-        catch (Exception exception) when (exception is HttpRequestException or IOException)
-        {
-            return new("pending", "connection_failed");
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
         {

@@ -9,6 +9,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<SubmissionValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WorkerDiagnostics>();
+builder.Services.AddHttpClient("GatewayIdentity").ConfigurePrimaryHttpMessageHandler(() =>
+    new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
+builder.Services.AddSingleton<IGatewayTokenProvider>(services => new GatewayTokenProvider(
+    services.GetRequiredService<IHttpClientFactory>().CreateClient("GatewayIdentity"),
+    services.GetRequiredService<IConfiguration>(), services.GetRequiredService<TimeProvider>()));
 builder.Services.AddHttpClient<CloudDelivery>().ConfigurePrimaryHttpMessageHandler(() =>
     new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
 builder.Services.AddScoped<OutboxDispatcher>();
