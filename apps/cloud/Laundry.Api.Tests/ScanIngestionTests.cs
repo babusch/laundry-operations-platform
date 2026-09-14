@@ -16,6 +16,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Protocols;
+using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -48,7 +50,8 @@ public sealed class ScanIngestionFixture : IAsyncLifetime
     }.ConnectionString;
 
     public WebApplicationFactory<Program> CreateApplication(string environment = "Development",
-        string remoteAddress = "127.0.0.1", bool enabled = true) =>
+        string remoteAddress = "127.0.0.1", bool enabled = true,
+        IConfigurationManager<OpenIdConnectConfiguration>? configurationManager = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
@@ -63,10 +66,11 @@ public sealed class ScanIngestionFixture : IAsyncLifetime
                 {
                     options.Authority = null!;
                     options.MetadataAddress = null!;
-                    options.ConfigurationManager = null!;
+                    options.ConfigurationManager = configurationManager!;
                     options.TokenValidationParameters.ValidIssuer = TestIssuer;
                     options.TokenValidationParameters.ValidAudience = TestAudience;
-                    options.TokenValidationParameters.IssuerSigningKey = _signingKey;
+                    options.TokenValidationParameters.IssuerSigningKey =
+                        configurationManager is null ? _signingKey : null;
                 });
             });
         });
@@ -149,6 +153,40 @@ public sealed class ScanIngestionTests(ScanIngestionFixture fixture) : IClassFix
         using var client = fixture.CreateAuthorizedClient(signingKey: new RsaSecurityKey(untrustedKey));
         using var response = await client.PostAsJsonAsync("/api/scans", ScanContractTests.Example());
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SigningKeyRolloverRefreshesMetadata_WithoutTrustingUnknownKeys()
+    {
+        using var previousRsa = RSA.Create(2048);
+        using var currentRsa = RSA.Create(2048);
+        using var untrustedRsa = RSA.Create(2048);
+        var previousKey = Key(previousRsa);
+        var currentKey = Key(currentRsa);
+        var untrustedKey = Key(untrustedRsa);
+        var configurationManager = new RotatingConfigurationManager(
+            Configuration(previousKey), Configuration(previousKey, currentKey));
+        await using var app = fixture.CreateApplication(configurationManager: configurationManager);
+
+        using var currentClient = fixture.CreateAuthorizedClient(app, signingKey: currentKey);
+        using var refreshTrigger = await currentClient.PostAsJsonAsync(
+            "/api/scans", ScanContractTests.Example());
+        Assert.Equal(HttpStatusCode.Unauthorized, refreshTrigger.StatusCode);
+        Assert.True(configurationManager.RefreshRequests > 0);
+
+        using var currentResponse = await currentClient.PostAsJsonAsync(
+            "/api/scans", ScanContractTests.Example());
+        Assert.Equal(HttpStatusCode.Created, currentResponse.StatusCode);
+
+        using var previousClient = fixture.CreateAuthorizedClient(app, signingKey: previousKey);
+        using var previousResponse = await previousClient.PostAsJsonAsync(
+            "/api/scans", ScanContractTests.Example());
+        Assert.Equal(HttpStatusCode.Created, previousResponse.StatusCode);
+
+        using var untrustedClient = fixture.CreateAuthorizedClient(app, signingKey: untrustedKey);
+        using var untrustedResponse = await untrustedClient.PostAsJsonAsync(
+            "/api/scans", ScanContractTests.Example());
+        Assert.Equal(HttpStatusCode.Unauthorized, untrustedResponse.StatusCode);
     }
 
     [Theory]
@@ -411,5 +449,32 @@ public sealed class ScanIngestionTests(ScanIngestionFixture fixture) : IClassFix
         using var scope = fixture.Application.Services.CreateScope();
         return await scope.ServiceProvider.GetRequiredService<ScanDbContext>()
             .Observations.AsNoTracking().SingleOrDefaultAsync(x => x.EventId == eventId);
+    }
+
+    private static RsaSecurityKey Key(RSA rsa) =>
+        new(rsa) { KeyId = Guid.NewGuid().ToString("N") };
+
+    private static OpenIdConnectConfiguration Configuration(params SecurityKey[] signingKeys)
+    {
+        var configuration = new OpenIdConnectConfiguration
+        {
+            Issuer = ScanIngestionFixture.TestIssuer
+        };
+        foreach (var signingKey in signingKeys) configuration.SigningKeys.Add(signingKey);
+        return configuration;
+    }
+
+    private sealed class RotatingConfigurationManager(
+        OpenIdConnectConfiguration initial,
+        OpenIdConnectConfiguration refreshed) : IConfigurationManager<OpenIdConnectConfiguration>
+    {
+        private int _refreshRequests;
+
+        public int RefreshRequests => Volatile.Read(ref _refreshRequests);
+
+        public Task<OpenIdConnectConfiguration> GetConfigurationAsync(CancellationToken cancel) =>
+            Task.FromResult(RefreshRequests == 0 ? initial : refreshed);
+
+        public void RequestRefresh() => Interlocked.Increment(ref _refreshRequests);
     }
 }

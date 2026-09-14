@@ -471,6 +471,18 @@ A separate live test resolved and temporarily disabled only Keycloak's `service-
 
 Disabling the account prevents **new** tokens. A signed token that was already cached can remain accepted until it expires—currently no more than five minutes—because the cloud validates it locally rather than asking Keycloak about every request. This bounded delay preserves availability and avoids making every scan depend on a live identity lookup. Production revocation timing must be agreed explicitly; do not describe account disablement as instantaneous revocation.
 
+### Verify signing-key rotation
+
+With Keycloak and the cloud API running as described above, run:
+
+```powershell
+./deploy/local/Test-Gateway-Signing-Key-Rotation.ps1
+```
+
+The script first makes the running cloud cache the current public-key metadata. It then creates a uniquely named temporary RSA signing provider at higher priority, confirms Keycloak issues newly signed tokens while publishing both current and previous public keys, and submits synthetic observations under both keys. The first new-key request may return 401 while ASP.NET Core requests fresh metadata; retrying the unchanged event is safe and matches the gateway sender's behavior.
+
+A `finally` block removes only the provider created by that run and confirms Keycloak resumed signing with the original development key. The check adds two synthetic observations to the cloud development database, but does not alter plant data or database volumes. It resolves existing ignored Development credentials through Docker Compose internally and does not print credentials, tokens, signing-key IDs, or generated scan IDs. Do not use this development helper against a production realm.
+
 Run the cross-component test with Docker available:
 
 ```powershell

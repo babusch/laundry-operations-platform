@@ -47,6 +47,8 @@ Local `/api/sync` diagnostics expose scoped counts, oldest pending age, safe per
 
 Cloud `POST /api/scans` remains restricted to loopback Development use, but now requires a signed, unexpired gateway token for the cloud API audience and `scans.ingest` permission. Tenant/plant registration comes from verified token claims and must match the event before storage. The gateway acquires and caches short-lived tokens without making identity availability part of local acceptance. Original JSON and idempotent behavior remain unchanged. See [ADRs 0012](decisions/0012-cloud-validates-gateway-tokens.md) and [0013](decisions/0013-gateway-acquires-short-lived-tokens.md). Authenticated remote production ingestion remains later work.
 
+Cloud signing-key metadata refresh is enabled for planned identity-provider rollover. Normal rotation retains the previous public key during an overlap while new tokens use the new active key. An initial new-key request can receive a transient 401 as refresh begins; the sender retries the immutable event and retains it durably if a later attempt is needed. Unknown keys not published by the configured authority remain rejected.
+
 - Assume at-least-once delivery, not exactly-once transport.
 - Make processing effectively once through idempotency and uniqueness constraints.
 - Persist outgoing events in the same transaction as the local state change.
@@ -86,6 +88,7 @@ Use scoped incremental synchronization and tombstones for removals. Avoid copyin
 - Internet disappears before, during, and after scan acknowledgement.
 - Identity provider is unavailable before token acquisition; local acceptance continues and queued events synchronize unchanged after recovery.
 - Gateway identity is disabled before token acquisition; no cloud delivery occurs, local evidence remains pending, and recovery preserves the event ID and payload.
+- Identity signing key rotates while cloud metadata is cached; the new key is learned, the overlapping previous key remains valid, and an unrelated key remains rejected.
 - Cloud accepts an event but the response is lost.
 - Gateway restarts with pending outbox events.
 - PWA closes with queued IndexedDB events.

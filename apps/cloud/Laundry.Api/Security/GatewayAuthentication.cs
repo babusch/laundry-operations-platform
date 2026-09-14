@@ -56,6 +56,7 @@ public static class GatewayAuthorization
                 options.RequireHttpsMetadata = true;
                 options.MapInboundClaims = false;
                 options.BackchannelTimeout = TimeSpan.FromSeconds(5);
+                options.RefreshOnIssuerKeyNotFound = true;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ClockSkew = TimeSpan.FromSeconds(30),
