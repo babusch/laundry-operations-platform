@@ -177,13 +177,13 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 - Tests prove authenticated barcode/RFID acceptance, idempotency, concurrency, mismatched scope, arbitrary v1 device metadata, absent credentials, missing permission, missing antiforgery, insecure transport, database outage/recovery, transaction rollback, and the Development/loopback boundary.
 - No unauthenticated fallback exists in Staging or Production. Source authentication still does not identify the operator: authenticated operator and workflow context are required before scans can count as real laundry operations.
 
-### 5.4.5 — Offline, restart, and revocation proof
+### 5.4.5 — Offline, restart, and revocation proof — implemented and live-verified
 
-- Prove an enrolled station submits while Keycloak and the cloud are stopped.
-- Prove gateway restart retains access and queued scans unchanged.
-- Prove local revoke prevents new submissions even during WAN outage.
-- Prove wrong source, copied/invalid credentials, CSRF, and insecure transport store nothing.
-- Prove retrying the same accepted event remains idempotent.
+- Automated tests prove an enrolled source obtains durable local acceptance with forwarding disabled and without cloud or identity configuration. Cloud and Keycloak are not part of the local authentication path.
+- The exact enrolled source cookie survives gateway application restart. The browser obtains a fresh antiforgery token, retries the unchanged event, receives `alreadyAcceptedLocally`, and leaves exactly one observation/outbox pair.
+- Local source revocation immediately rejects new submissions while preserving already queued work. Missing, malformed/tampered, cross-tenant/cross-plant, and permissionless credentials plus missing/invalid antiforgery and insecure transport store nothing.
+- A copied browser cookie cannot cross the configured gateway tenant/plant scope. Because it is intentionally an opaque bearer credential, an exact copy used against the same gateway is valid until expiry or local revocation; stronger copy resistance requires a managed device-bound credential such as a client certificate.
+- A repeatable live helper started the real Development gateway with cloud forwarding disabled, enrolled and accepted a synthetic observation, restarted the process, proved idempotent retry with the same cookie, revoked only that synthetic source in plant PostgreSQL, and proved a new observation returned 401 and was absent from storage. It stopped the gateway and removed its temporary logs afterward.
 
 ### 5.4.6 — First real adapter proof, after hardware selection
 
@@ -195,14 +195,14 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 ## Acceptance criteria for checkpoint 5.4
 
 - A newly enrolled simulated browser station submits over trusted HTTPS.
-- Missing, invalid, expired, revoked, and wrong-source credentials store no observation or outbox row.
+- Missing, invalid, expired, revoked, and wrong-scope credentials store no observation or outbox row. An exact bearer-cookie copy on the same gateway is not distinguishable from the original browser and remains valid until expiry or revocation.
 - The gateway derives and enforces tenant/plant/station scope from the local trusted source. Optional equipment attribution is not authentication proof.
 - Dedicated, flexible, and default-with-switching station behavior remains possible; authentication does not choose the operation.
 - WAN, cloud, and Keycloak outages do not stop a valid enrolled station from obtaining durable local acceptance.
 - Non-Development enrollment and privilege changes are not possible through an offline or unauthenticated bypass; the temporary Development bootstrap remains loopback-only and explicitly attributed as a system action.
 - Credential material and enrollment codes never appear in Git, logs, scan JSON, or API error bodies.
 - Rotation supports a bounded overlap and revocation without rewriting historical evidence.
-- Tests cover outage, restart, retry, duplicate, concurrent enrollment, wrong scope, CSRF, and revocation cases.
+- Tests cover outage, restart with the same credential, retry, duplicate, concurrent enrollment, wrong scope, CSRF, and revocation cases.
 - Documentation explains certificate trust, enrollment, rotation, lost-station recovery, and the central-revocation delay.
 
 ## Not included in this slice

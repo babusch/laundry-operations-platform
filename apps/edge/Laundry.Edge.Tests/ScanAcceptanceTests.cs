@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Json.Schema;
 using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
+using Laundry.Edge.Security;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -70,16 +71,20 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
     }
 
     [Fact]
-    public async Task EquivalentJsonRetryAndGatewayRestartPreserveEvidence()
+    public async Task SameCredentialAndEquivalentRetrySurviveGatewayRestartWithoutDuplicate()
     {
         var json = SubmissionContractTests.Example();
+        string sourceCookie;
         using (var app = fixture.CreateApplication())
         using (var source = await EnrolledSourceClient.CreateAsync(app))
         using (var response = await source.PostScanAsync(json))
+        {
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+            sourceCookie = source.SourceCookie;
+        }
         var stored = await Stored(json);
         using var restarted = fixture.CreateApplication();
-        using var retrySource = await EnrolledSourceClient.CreateAsync(restarted);
+        using var retrySource = await EnrolledSourceClient.ResumeAsync(restarted, sourceCookie);
         var reordered = new JsonObject(json.Reverse().Select(x => new KeyValuePair<string, JsonNode?>(x.Key, x.Value?.DeepClone())));
         using var content = new StringContent(reordered.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8, "application/json");
         using var retryRequest = new HttpRequestMessage(HttpMethod.Post, "/api/scans") { Content = content };
@@ -90,6 +95,20 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         var database = scope.ServiceProvider.GetRequiredService<PlantDbContext>();
         await database.Database.MigrateAsync();
         Assert.False(database.Database.HasPendingModelChanges());
+        await AssertPair(json);
+    }
+
+    [Fact]
+    public async Task EnrolledSourceAcceptsLocallyWithoutCloudOrIdentityConfiguration()
+    {
+        var json = SubmissionContractTests.Example();
+        Assert.False(fixture.Application.Services.GetRequiredService<IConfiguration>()
+            .GetValue<bool>("Forwarding:Enabled"));
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+
+        using var response = await source.PostScanAsync(json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         await AssertPair(json);
     }
 
@@ -181,6 +200,98 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Null(await Stored(json));
+    }
+
+    [Fact]
+    public async Task InvalidAntiforgeryTokenIsRejectedAndStoresNothing()
+    {
+        var json = SubmissionContractTests.Example();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+
+        using var response = await source.PostScanAsync(json, antiforgeryOverride: "invalid-token");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(await Stored(json));
+    }
+
+    [Fact]
+    public async Task TamperedCredentialIsUnauthorizedAndStoresNothing()
+    {
+        var json = SubmissionContractTests.Example();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        var separator = source.SourceCookie.IndexOf('.');
+        var tamperedCookie = source.SourceCookie[..(separator + 1)] + Guid.NewGuid().ToString("N");
+        using var client = fixture.Application.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = false
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/scans")
+        {
+            Content = JsonContent.Create(json)
+        };
+        request.Headers.Add("Cookie", tamperedCookie);
+        request.Headers.Add("X-Laundry-CSRF", "invalid-token");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(await Stored(json));
+    }
+
+    [Theory]
+    [InlineData("tenant")]
+    [InlineData("plant")]
+    public async Task CopiedCredentialCannotCrossGatewayScope(string changedScope)
+    {
+        var json = SubmissionContractTests.Example();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var otherGateway = fixture.CreateApplication(
+            tenant: changedScope == "tenant" ? Guid.NewGuid().ToString() : null,
+            plant: changedScope == "plant" ? Guid.NewGuid().ToString() : null);
+        using var client = otherGateway.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = false
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/scans")
+        {
+            Content = JsonContent.Create(json)
+        };
+        request.Headers.Add("Cookie", source.SourceCookie);
+        request.Headers.Add("X-Laundry-CSRF", "invalid-token");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(await Stored(json));
+    }
+
+    [Fact]
+    public async Task LocalSourceRevocationImmediatelyStopsNewScansAndPreservesQueuedWork()
+    {
+        var accepted = SubmissionContractTests.Example();
+        var rejected = SubmissionContractTests.Example();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var first = await source.PostScanAsync(accepted);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        await using (var scope = fixture.Application.Services.CreateAsyncScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<PlantDbContext>();
+            var storedSource = await database.TrustedSources.SingleAsync(x => x.SourceId == source.SourceId);
+            storedSource.Status = TrustedSourceStatus.Revoked;
+            storedSource.StatusChangedAtUtc = DateTimeOffset.UtcNow;
+            storedSource.ConfigurationVersion++;
+            await database.SaveChangesAsync();
+        }
+
+        using var response = await source.PostScanAsync(rejected);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(await Stored(rejected));
+        await AssertPair(accepted);
     }
 
     [Fact]

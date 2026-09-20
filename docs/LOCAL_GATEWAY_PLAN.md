@@ -1,7 +1,7 @@
 # Local gateway implementation plan
 
 Date: 2026-09-07  
-Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented. Checkpoint 5 gateway-to-cloud identity and source-authenticated durable scan acceptance are implemented for loopback Development. The source-identity direction in the [station-to-gateway security plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved; device identity is optional rather than mandatory. Operator authentication, workflow behavior, and deployment details remain under review, and authenticated operator context is required before production scans count as business actions. Production credential lifecycle remains planned. See project status and ADRs 0005–0014 for current decisions and verification.
+Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented. Checkpoint 5 gateway-to-cloud identity, source-authenticated durable scan acceptance, and its offline/restart/revocation proof are implemented for loopback Development through 5.4.5. The source-identity direction in the [station-to-gateway security plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved; device identity is optional rather than mandatory. Operator authentication, workflow behavior, and deployment details remain under review, and authenticated operator context is required before production scans count as business actions. Production credential lifecycle remains planned. See project status and ADRs 0005–0014 for current decisions and verification.
 
 ## Purpose and boundaries
 

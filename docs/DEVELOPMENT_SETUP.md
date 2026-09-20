@@ -342,6 +342,18 @@ The helper creates one pending browser trusted source for the configured Develop
 
 These ten-minute and 30-day values are Development proof settings, not approved production lifetimes. The bootstrap route exists only in Development, requires loopback HTTPS, and is attributed to `local-development-bootstrap`; it is not a production administrative mechanism. Enrollment, session, and scan submission reject HTTP. `POST /api/scans` now requires the enrolled source cookie, `scans.submit`, and the antiforgery token. This authenticates the source/station only; authenticated operator and workflow context must be added before a scan can count as a real laundry operation.
 
+### Verify restart, offline independence, and local revocation
+
+Stop any gateway already using port 7200, keep `plant-postgres` running, and run:
+
+```powershell
+./deploy/local/Test-Gateway-Source-Resilience.ps1
+```
+
+The helper starts the Development gateway with its checked-in cloud forwarding default disabled, enrolls one synthetic browser source, and durably accepts a synthetic observation without requiring cloud or Keycloak. It restarts the gateway process, obtains a fresh antiforgery token using the same persisted source cookie, and proves an unchanged retry remains one observation/outbox pair. It then revokes only the newly created synthetic source in plant PostgreSQL, verifies another scan returns 401 and is not stored, stops the gateway, and removes its temporary logs. It leaves the synthetic source revoked and the first synthetic observation queued in the Development database.
+
+The browser cookie is an opaque bearer credential. Copying it to another tenant/plant gateway fails trusted-scope resolution, but an exact copy presented to the same gateway is indistinguishable from the original browser until it expires or is revoked. A pilot that requires device-bound copy resistance should use a managed certificate or another platform-supported device-bound credential rather than inventing a browser signing protocol.
+
 In another terminal:
 
 ```powershell
