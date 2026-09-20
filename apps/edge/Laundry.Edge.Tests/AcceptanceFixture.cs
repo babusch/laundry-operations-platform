@@ -14,7 +14,7 @@ public sealed class AcceptanceFixture : IAsyncLifetime
 {
     public PostgreSqlContainer Postgres { get; } = new PostgreSqlBuilder("postgres:18.6-alpine3.23").Build();
     public string ConnectionString => new Npgsql.NpgsqlConnectionStringBuilder(Postgres.GetConnectionString())
-        { Timeout = 2, CommandTimeout = 2 }.ConnectionString;
+    { Timeout = 2, CommandTimeout = 2 }.ConnectionString;
     public WebApplicationFactory<Program> Application { get; private set; } = null!;
 
     public async Task InitializeAsync()
@@ -38,8 +38,7 @@ public sealed class AcceptanceFixture : IAsyncLifetime
                 ["ScanAcceptance:Enabled"] = enabled.ToString(),
                 ["ScanAcceptance:TenantId"] = tenant ?? "11111111-1111-4111-8111-111111111111",
                 ["ScanAcceptance:PlantId"] = plant ?? "22222222-2222-4222-8222-222222222222",
-                ["ScanAcceptance:StationId"] = "33333333-3333-4333-8333-333333333333",
-                ["ScanAcceptance:DeviceId"] = "44444444-4444-4444-8444-444444444444"
+                ["ScanAcceptance:StationId"] = "33333333-3333-4333-8333-333333333333"
             }));
             builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new RemoteAddress(address)));
         });

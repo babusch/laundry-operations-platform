@@ -1,36 +1,60 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Laundry.Edge.Security;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.EntityFrameworkCore;
 using Laundry.Edge.Persistence;
 using Npgsql;
 
 namespace Laundry.Edge.Scans;
 
-public sealed record DevelopmentSource(Guid TenantId, Guid PlantId, Guid StationId, Guid DeviceId);
+public sealed record DevelopmentSource(Guid TenantId, Guid PlantId, Guid StationId);
 public sealed record LocalReceipt(Guid EventId, string Status, DateTimeOffset GatewayAcceptedAtUtc,
     string DeliveryStatus);
 
 public static class ScanAcceptanceEndpoint
 {
-    public static void MapScanAcceptance(this WebApplication app, DevelopmentSource source)
+    public static void MapScanAcceptance(this WebApplication app)
     {
         app.MapPost("/api/scans", (HttpContext http, SubmissionValidator validator, PlantDbContext database,
-            TimeProvider clock, ILoggerFactory logs, CancellationToken cancellationToken) =>
-            AcceptAsync(http, validator, database, clock, logs, source, cancellationToken))
+            TimeProvider clock, ILoggerFactory logs, BrowserCookieSourceAuthenticator authenticator,
+            IAntiforgery antiforgery, CancellationToken cancellationToken) =>
+            AcceptAsync(http, validator, database, clock, logs, authenticator, antiforgery, cancellationToken))
             .WithName("SubmitScan")
             .Accepts<JsonElement>("application/json")
             .Produces<LocalReceipt>(201).Produces<LocalReceipt>(200)
-            .ProducesProblem(400).ProducesProblem(403).ProducesProblem(409)
+            .ProducesProblem(400).ProducesProblem(401).ProducesProblem(403).ProducesProblem(409)
             .ProducesProblem(413).ProducesProblem(415).ProducesProblem(503);
     }
 
     private static async Task<IResult> AcceptAsync(HttpContext http, SubmissionValidator validator,
-        PlantDbContext database, TimeProvider clock, ILoggerFactory logs, DevelopmentSource source,
+        PlantDbContext database, TimeProvider clock, ILoggerFactory logs,
+        BrowserCookieSourceAuthenticator authenticator, IAntiforgery antiforgery,
         CancellationToken cancellationToken)
     {
         if (http.Connection.RemoteIpAddress is not { } address || !IPAddress.IsLoopback(address))
             return Results.Problem(statusCode: 403, title: "Local development access only.");
+        if (!http.Request.IsHttps)
+            return Results.Problem(statusCode: 403, title: "Scan submission requires HTTPS.");
+
+        SourceIdentity? source;
+        try
+        {
+            source = await authenticator.AuthenticateAsync(http, cancellationToken);
+        }
+        catch (Exception exception) when (IsStorageUnavailable(exception))
+        {
+            http.Response.Headers.RetryAfter = "5";
+            return Results.Problem(statusCode: 503,
+                title: "Local source authentication unavailable; retry the same submission unchanged.");
+        }
+
+        if (source is null) return Results.Unauthorized();
+        if (!source.Permissions.Contains(SourcePermissions.SubmitScans))
+            return Results.Problem(statusCode: 403, title: "The trusted source cannot submit scans.");
+        if (!await antiforgery.IsRequestValidAsync(http))
+            return Results.Problem(statusCode: 400, title: "A valid antiforgery token is required.");
         if (!http.Request.HasJsonContentType())
             return Results.Problem(statusCode: 415, title: "Send an application/json body.");
 
@@ -54,9 +78,12 @@ public static class ScanAcceptanceEndpoint
             if (!validator.IsValid(json)) return InvalidScan();
             if (json.GetProperty("tenantId").GetGuid() != source.TenantId ||
                 json.GetProperty("plantId").GetGuid() != source.PlantId ||
-                json.GetProperty("stationId").GetGuid() != source.StationId ||
-                json.GetProperty("deviceId").GetGuid() != source.DeviceId)
-                return Results.Problem(statusCode: 403, title: "Scan source is outside the configured development scope.");
+                json.GetProperty("stationId").GetGuid() != source.StationId)
+                return Results.Problem(statusCode: 403,
+                    title: "Scan scope does not match the authenticated trusted source.");
+
+            // The provisional v1 deviceId is untrusted capture metadata, not source identity.
+            // A future request version will remove the mandatory field.
 
             // Match the cloud storage adapter's representation limits before accepting locally.
             _ = json.GetProperty("observedAtUtc").GetDateTimeOffset();
@@ -117,7 +144,7 @@ public static class ScanAcceptanceEndpoint
             return Results.Json(new LocalReceipt(stored.EventId, status, stored.AcceptedAtUtc, delivery.Status),
                 statusCode: inserted == 1 ? 201 : 200);
         }
-        catch (Exception exception) when (exception is NpgsqlException or TimeoutException)
+        catch (Exception exception) when (IsStorageUnavailable(exception))
         {
             logger.LogWarning("Local scan storage unavailable: event {EventId}, correlation {CorrelationId}.", scan.EventId, correlationId);
             http.Response.Headers.RetryAfter = "5";
@@ -133,5 +160,12 @@ public static class ScanAcceptanceEndpoint
         using var original = JsonDocument.Parse(left);
         using var incoming = JsonDocument.Parse(right);
         return JsonElement.DeepEquals(original.RootElement, incoming.RootElement);
+    }
+
+    private static bool IsStorageUnavailable(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+            if (current is NpgsqlException or TimeoutException) return true;
+        return false;
     }
 }

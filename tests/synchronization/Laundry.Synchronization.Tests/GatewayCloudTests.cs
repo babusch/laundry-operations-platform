@@ -78,9 +78,9 @@ public sealed class GatewayCloudTests
         var firstId = Guid.NewGuid();
         submission["eventId"] = firstId.ToString();
         using (var edge = Edge(true))
-        using (var client = edge.CreateClient())
+        using (var source = await EnrollSourceAsync(edge))
         {
-            using var response = await client.PostAsJsonAsync("/api/scans", submission);
+            using var response = await source.PostScanAsync(submission);
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
             await WaitFor(async () =>
             {
@@ -88,18 +88,19 @@ public sealed class GatewayCloudTests
                 var entry = await scope.ServiceProvider.GetRequiredService<PlantDbContext>().Outbox.AsNoTracking().SingleAsync();
                 return entry.Attempts >= 1 && entry.LastError == "http_503";
             });
-            using var healthy = await client.GetAsync("/health/ready");
+            using var healthy = await source.Client.GetAsync("/health/ready");
             Assert.Equal(HttpStatusCode.OK, healthy.StatusCode);
             // A delayed scan is still accepted while cloud delivery is failing.
             submission["eventId"] = Guid.NewGuid().ToString();
             submission["observedAtUtc"] = "2020-01-01T00:00:00Z";
-            using var second = await client.PostAsJsonAsync("/api/scans", submission);
+            using var second = await source.PostScanAsync(submission);
             Assert.Equal(HttpStatusCode.Created, second.StatusCode);
         }
 
         network.Reachable = true;
         using var restarted = Edge(true);
-        using var restartedClient = restarted.CreateClient();
+        using var restartedSource = await EnrollSourceAsync(restarted);
+        var restartedClient = restartedSource.Client;
         await WaitFor(async () =>
         {
             using var scope = restarted.Services.CreateScope();
@@ -119,7 +120,7 @@ public sealed class GatewayCloudTests
             var delivered = await local.Outbox.SingleAsync(x => x.EventId == scan.EventId);
             Assert.Equal(stored.CloudReceivedAtUtc, delivered.CloudReceivedAtUtc);
         }
-        using var retry = await restartedClient.PostAsJsonAsync("/api/scans", submission);
+        using var retry = await restartedSource.PostScanAsync(submission);
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         Assert.Contains("synchronized", await retry.Content.ReadAsStringAsync());
 
@@ -127,7 +128,7 @@ public sealed class GatewayCloudTests
         network.Reject = true;
         var replayEventId = Guid.NewGuid();
         submission["eventId"] = replayEventId.ToString();
-        using var rejectedSubmission = await restartedClient.PostAsJsonAsync("/api/scans", submission);
+        using var rejectedSubmission = await restartedSource.PostScanAsync(submission);
         Assert.Equal(HttpStatusCode.Created, rejectedSubmission.StatusCode);
         QueueItem? diagnostic = null;
         await WaitFor(async () =>
@@ -155,6 +156,54 @@ public sealed class GatewayCloudTests
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(50));
         while (!await condition()) await Task.Delay(200, deadline.Token);
     }
+
+    private static async Task<SourceClient> EnrollSourceAsync(WebApplicationFactory<Program> application)
+    {
+        var client = application.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = true
+        });
+        try
+        {
+            using var bootstrap = await client.PostAsync("/api/development/source-enrollments", null);
+            Assert.Equal(HttpStatusCode.Created, bootstrap.StatusCode);
+            var enrollment = (await bootstrap.Content.ReadFromJsonAsync<EnrollmentResponse>())!;
+            using var exchange = await client.PostAsJsonAsync("/api/source-enrollment/exchange",
+                new { enrollmentCode = enrollment.EnrollmentCode });
+            Assert.Equal(HttpStatusCode.NoContent, exchange.StatusCode);
+            var session = (await client.GetFromJsonAsync<SessionResponse>("/api/source-session"))!;
+            return new SourceClient(client, session.AntiforgeryHeaderName, session.AntiforgeryToken);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+    }
+
+    private sealed class SourceClient(HttpClient client, string header, string token) : IDisposable
+    {
+        public HttpClient Client { get; } = client;
+
+        public Task<HttpResponseMessage> PostScanAsync(JsonNode submission)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/scans")
+            {
+                Content = JsonContent.Create(submission)
+            };
+            request.Headers.Add(header, token);
+            return Client.SendAsync(request);
+        }
+
+        public void Dispose() => Client.Dispose();
+    }
+
+    private sealed record EnrollmentResponse(Guid SourceId, string EnrollmentCode, DateTimeOffset ExpiresAtUtc);
+    private sealed record SessionResponse(Guid SourceId, Guid StationId, string[] Permissions,
+        string AntiforgeryToken, string AntiforgeryHeaderName);
+
     private sealed class NetworkState
     {
         public volatile bool Reachable;

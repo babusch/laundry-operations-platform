@@ -330,6 +330,18 @@ The first command starts only the plant database. `--detach` leaves the containe
 
 The Development profile also retains `http://localhost:5200` temporarily so existing loopback-only work is not broken while station enrollment is built. Both addresses bind to `localhost`; neither is a LAN listener. New station-facing commands and code must use HTTPS. The HTTP address is not the permanent security model and will be removed after the protected station route has replaced it. If HTTPS reports a certificate trust error, create and trust the ASP.NET development certificate once with `dotnet dev-certs https --trust`, accept the Windows trust prompt, stop the gateway, and start it again. Never use that development certificate as a plant or production certificate.
 
+### Verify Development browser-source enrollment
+
+With the migrated plant database and gateway running over trusted HTTPS, use another terminal:
+
+```powershell
+./deploy/local/Test-Gateway-Source-Enrollment.ps1
+```
+
+The helper creates one pending browser trusted source for the configured Development tenant, plant, and station; receives a ten-minute single-use enrollment code; exchanges it over HTTPS for a 30-day Development credential in a host-only `Secure`, `HttpOnly`, `SameSite=Strict` cookie; obtains an antiforgery token; and submits one synthetic scan twice. It proves the protected mutation requires the cookie and token, the first submission is durable, and the unchanged retry is idempotent. The helper does not print the code, cookie, token, tag value, or generated IDs; normal gateway logs still include synthetic event and correlation IDs for traceability. A successful run leaves one active synthetic browser source, one observation/outbox pair, and only credential/code digests in plant PostgreSQL.
+
+These ten-minute and 30-day values are Development proof settings, not approved production lifetimes. The bootstrap route exists only in Development, requires loopback HTTPS, and is attributed to `local-development-bootstrap`; it is not a production administrative mechanism. Enrollment, session, and scan submission reject HTTP. `POST /api/scans` now requires the enrolled source cookie, `scans.submit`, and the antiforgery token. This authenticates the source/station only; authenticated operator and workflow context must be added before a scan can count as a real laundry operation.
+
 In another terminal:
 
 ```powershell
@@ -380,18 +392,17 @@ Database tests use disposable isolated PostgreSQL containers, not your developme
 
 ### Submit a scan to the gateway
 
-With the migration applied and gateway running, use another terminal:
+With the migration applied and gateway running, use the verified Development helper:
 
 ```powershell
-$submission = Get-Content packages/contracts/examples/submit-scan.v1.barcode.json -Raw
-Invoke-RestMethod -Method Post -Uri https://localhost:7200/api/scans -ContentType application/json -Body $submission
+./deploy/local/Test-Gateway-Source-Enrollment.ps1
 ```
 
-Expect `status: acceptedLocally`, a gateway acceptance timestamp, and `deliveryStatus: pending` when using ordinary gateway startup. Repeat the same command to see `alreadyAcceptedLocally` with the original timestamp and current recorded delivery status. When authenticated forwarding is enabled, the background worker may change the status to `synchronized` quickly. Local acceptance means saved at the plant, not a business action approved. The RFID submission example works with the same default simulator scope.
+The helper enrolls a simulated browser source, submits a fresh barcode observation, and retries the identical submission. It verifies `acceptedLocally` followed by `alreadyAcceptedLocally` without printing identifiers or credential material. When authenticated forwarding is enabled, the background worker may change the delivery status to `synchronized` quickly. Local acceptance means saved at the plant, not an operator-approved business action. The RFID request shape is also covered by automated tests.
 
 The gateway transaction saves the scan plus an outbox entry (a durable to-do item for cloud delivery). If either write fails, neither commits. A background worker delivers stored events without changing their payloads and records confirmed cloud receipts. Application and database restarts preserve these records.
 
-The Development-only endpoint checks loopback access and the configured `ScanAcceptance` tenant/plant/station/device tuple. It rejects caller-supplied gateway timestamps, source mismatches (403), invalid submissions (400), conflicting ID reuse (409), oversized bodies (413), and non-JSON content (415). A storage error returns 503 with a retry hint; keep the same submission because the commit outcome may be uncertain. Do not expose this endpoint to other machines before authentication is implemented.
+The Development-only endpoint requires loopback HTTPS, an active enrolled source cookie, `scans.submit`, and the matching antiforgery token. Trusted tenant, plant, and station scope comes from the source record and must match the provisional v1 body. The v1 `deviceId` is preserved only as untrusted compatibility metadata; it is neither required source identity nor authorization and will become optional in a future contract. The endpoint rejects caller-supplied gateway timestamps, source mismatches (403), invalid submissions (400), conflicting ID reuse (409), oversized bodies (413), and non-JSON content (415). A storage or authentication-database error returns 503 with a retry hint; keep the same submission because the commit outcome may be uncertain. The endpoint remains loopback-only while production enrollment, operator sessions, and plant certificate deployment are designed.
 
 Inspect pending delivery bookkeeping without printing tag values:
 
@@ -399,14 +410,10 @@ Inspect pending delivery bookkeeping without printing tag values:
 docker compose exec plant-postgres psql --username laundry_edge --dbname laundry_plant --command 'SELECT event_id, status FROM plant.outbox;'
 ```
 
-For a fresh synthetic observation, assign a new ID once and then preserve it for retries:
+For another fresh protected synthetic observation, rerun the helper. It assigns one new ID and preserves it for its retry:
 
 ```powershell
-$newScan = Get-Content packages/contracts/examples/submit-scan.v1.barcode.json -Raw | ConvertFrom-Json
-$newScan.eventId = [guid]::NewGuid().ToString()
-$newScan.correlationId = $newScan.eventId
-$submission = $newScan | ConvertTo-Json -Depth 5
-Invoke-RestMethod -Method Post -Uri https://localhost:7200/api/scans -ContentType application/json -Body $submission
+./deploy/local/Test-Gateway-Source-Enrollment.ps1
 ```
 
 ## Run authenticated gateway-to-cloud forwarding

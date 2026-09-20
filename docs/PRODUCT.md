@@ -38,6 +38,8 @@ Station behavior is configurable: dedicated operation, flexible operation select
 
 Every material transition must be traceable to time, plant, trusted source/station, operator when applicable, and the affected physical or aggregate unit. Attribute specific equipment only when that identity is actually available; do not describe keyboard-like input as authenticated hardware.
 
+Before a scan can count as a receiving, sorting, packing, dispatch, inventory, or other operational action, both the source/station and the active operator must be authenticated and authorized for that workflow. A device ID is not required: stations may use several scanners, and equipment attribution stays optional unless the integration can establish it reliably.
+
 ## Initial product boundary
 
 Build first:

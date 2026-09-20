@@ -1,7 +1,7 @@
 # Local gateway implementation plan
 
 Date: 2026-09-07  
-Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented. Checkpoint 5 gateway-to-cloud identity is implemented for loopback Development. The source-identity direction in the [station-to-gateway security plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved; operator authentication, workflow behavior, deployment details, and implementation remain under review. Production credential lifecycle remains planned. See project status and ADRs 0005–0013 for current decisions and verification.
+Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented. Checkpoint 5 gateway-to-cloud identity and source-authenticated durable scan acceptance are implemented for loopback Development. The source-identity direction in the [station-to-gateway security plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved; device identity is optional rather than mandatory. Operator authentication, workflow behavior, and deployment details remain under review, and authenticated operator context is required before production scans count as business actions. Production credential lifecycle remains planned. See project status and ADRs 0005–0014 for current decisions and verification.
 
 ## Purpose and boundaries
 
@@ -30,7 +30,7 @@ No separate message broker, Redis, MQTT, Kubernetes, or worker deployment is nee
 ## Scan acceptance and delivery
 
 1. A station or simulator generates an origin event ID, correlation ID, source time, and identifier. Retries preserve the original request.
-2. The gateway validates the request and checks trusted tenant/plant/station/device scope. Body fields do not establish authorization. Initial synthetic access stays loopback-only in Development; real access requires authentication.
+2. The gateway authenticates the enrolled source, requires `scans.submit` and antiforgery, validates the request, and enforces trusted tenant/plant/station scope. Body fields do not establish authorization, and physical device identity is not mandatory. Access remains loopback-only in Development while production enrollment and operator workflow authorization are designed.
 3. The gateway creates the accepted event and saves it together with an outbox entry in one database transaction. The outbox is a durable list of pending deliveries, not an in-memory queue.
 4. Only after commit does the gateway return local acceptance. Cloud availability is not consulted for this acknowledgement.
 5. The background worker forwards the stored event to the cloud API. It never regenerates event IDs, timestamps, or payloads on retry.
@@ -109,7 +109,7 @@ Add migrations under gateway persistence when schema changes are introduced. Add
 ### 5. Secure network access
 
 - Authenticated gateway-to-cloud identity and tenant/plant authorization are implemented for loopback Development.
-- Trusted Development HTTPS and the local trusted-source registry/authentication seam are implemented. Browser enrollment and scan-route authorization remain the next station-to-gateway slices.
+- Trusted Development HTTPS, the local trusted-source registry/authentication seam, simulated secure-cookie browser enrollment, and protected durable scan acceptance are implemented.
 - Do not weaken ADR 0004's development-only boundary to bypass authentication.
 - Follow with operator PWA integration and selected hardware, as separately scoped checkpoints.
 

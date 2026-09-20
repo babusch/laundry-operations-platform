@@ -40,6 +40,8 @@ A station may use several input technologies and physical peripherals. A keyboar
 
 A source credential does not identify a human, and an operator login does not by itself prove the station. The exact operator sign-in and active-workflow design is deferred. Reader signals without the required operator/workflow context must not be interpreted as completed receiving, packing, dispatch, inventory, or another operational action.
 
+Approved enforcement direction (2026-09-20): authenticated operator context will be mandatory before a scan can cause or confirm a real laundry business action. Source-authenticated raw observation capture is infrastructure evidence only until that operator/workflow rule is implemented. Physical device identity is not mandatory; optional equipment attribution may be added only when a workflow or integration can establish it honestly.
+
 - Internal IDs are immutable UUIDs.
 - Human-readable numbers are separate attributes and may follow tenant-specific sequences.
 - RFID EPC, barcode, and vendor identifiers are external identities that can be assigned, retired, or replaced.

@@ -3,6 +3,7 @@ using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
 using Laundry.Edge.Security;
 using Laundry.Edge.Synchronization;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,7 +20,17 @@ builder.Services.AddHttpClient<CloudDelivery>().ConfigurePrimaryHttpMessageHandl
     new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
 builder.Services.AddScoped<OutboxDispatcher>();
 builder.Services.AddScoped<ISourceIdentityResolver, SourceIdentityResolver>();
+builder.Services.AddScoped<BrowserCookieSourceAuthenticator>();
 builder.Services.AddHostedService<OutboxWorker>();
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = SourceEnrollmentEndpoints.AntiforgeryHeaderName;
+    options.Cookie.Name = SourceEnrollmentEndpoints.AntiforgeryCookieName;
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.Cookie.Path = "/";
+});
 
 builder.Services.AddDbContext<PlantDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Plant")));
@@ -32,10 +43,12 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanAcc
 {
     var source = app.Configuration.GetSection("ScanAcceptance").Get<DevelopmentSource>()
         ?? throw new InvalidOperationException("Configure the development scan source.");
-    if (new[] { source.TenantId, source.PlantId, source.StationId, source.DeviceId }.Contains(Guid.Empty))
-        throw new InvalidOperationException("Configure nonempty development tenant, plant, station, and device IDs.");
-    app.MapScanAcceptance(source);
+    if (new[] { source.TenantId, source.PlantId, source.StationId }.Contains(Guid.Empty))
+        throw new InvalidOperationException("Configure nonempty development tenant, plant, and station IDs.");
+    app.MapScanAcceptance();
     if (app.Configuration.GetValue<bool>("SyncDiagnostics:Enabled")) app.MapSyncDiagnostics(source);
+    if (app.Configuration.GetValue<bool>("SourceEnrollment:Enabled"))
+        app.MapSourceEnrollment(new SourceScope(source.TenantId, source.PlantId), source.StationId);
 }
 
 app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false });

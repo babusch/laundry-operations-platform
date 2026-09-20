@@ -103,7 +103,7 @@ Authentication and source authorization happen before the scan body reaches dura
 5. Compare the v1 body tenant, plant, and station IDs with the trusted source. A mismatch returns 403 and stores nothing. Do not treat the origin-supplied v1 `deviceId` as authentication proof.
 6. Run the existing transaction that stores immutable evidence and its outbox row before returning success.
 
-The body remains evidence supplied by the origin, but it does not grant authority. The provisional v1 contract still requires `deviceId`; leave that contract unchanged during 5.4.2, describe the value as limited-assurance capture metadata, and design a versioned replacement before checkpoint 5.4.4 protects the endpoint. That replacement should carry server-derived trusted-source attribution and make equipment/capture-channel attribution optional where appropriate.
+The body remains evidence supplied by the origin, but it does not grant authority. The protected endpoint retains the provisional v1 `deviceId` only for compatibility and does not use it for authorization. The approved replacement direction is a versioned request/event design with server-derived trusted-source attribution and optional equipment/capture-channel attribution where appropriate; device identity will not be mandatory.
 
 Station authentication does not lock a station to receiving, dispatch, one input technology, or another operation. Operational choices and capabilities remain separate configuration. A fallback station keeps its own real trusted-source/station identity while performing an operation it is allowed and equipped to perform.
 
@@ -148,7 +148,7 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 - The Development gateway now makes trusted `https://localhost:7200` its primary listener.
 - The existing `http://localhost:5200` endpoint remains loopback-only during transition and is not exposed to the LAN.
 - A configuration test fixes HTTPS as the first address and requires every Development address to use `localhost`. A live Windows check succeeded without bypassing certificate validation, reached the plant database, accepted a synthetic scan durably over HTTPS, and found only `127.0.0.1`/`::1` listeners.
-- This checkpoint does not pretend the temporary HTTP route is secure. Rejecting insecure scan submission becomes enforceable when checkpoint 5.4.4 adds the protected route; it must be tested there before the HTTP transition listener is removed.
+- The temporary HTTP listener remains only for non-station transition compatibility. Protected scan submission rejects it; removing the listener entirely remains a later cleanup after all local callers use HTTPS.
 - The eventual stable plant name, certificate authority, provisioning, renewal, and recovery process remain open deployment decisions.
 
 ### 5.4.2 — Source registry and authentication seam — implemented and verified
@@ -159,21 +159,23 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 - Application persistence rejects tenant/plant/station/kind reassignment, immutable credential-verifier changes, and modification or deletion of source-security audit records. Rotation creates another credential and can retain a bounded active overlap.
 - Tests prove tenant/plant isolation, explicit permission resolution, credential lifecycle and overlap, immediate local disable/revocation, immutable source scope, and append-only audit. Browser credential issuance and scan authorization intentionally remain later checkpoints.
 
-### 5.4.3 — One simulated browser enrollment
+### 5.4.3 — One simulated browser enrollment — implemented and live-verified
 
-- Add the Development-only loopback bootstrap that creates one short-lived enrollment code.
-- Add the HTTPS enrollment exchange and secure host-only cookie.
-- Store only credential/code digests and consume codes atomically.
-- Add antiforgery issuance/validation for cookie-authenticated mutations.
-- Test missing, invalid, expired, reused, and concurrent enrollment attempts without logging secrets.
+- A Development-only bootstrap creates a pending browser trusted source for the configured tenant, plant, and station, grants only `scans.submit`, and returns a ten-minute enrollment code. It requires loopback HTTPS and records explicit `local-development-bootstrap` audit actions.
+- The HTTPS exchange stores only the code and credential digests, consumes the code atomically, activates the source, and returns the credential in a host-only `Secure`, `HttpOnly`, `SameSite=Strict` cookie. No `Domain` attribute is set.
+- An authenticated session endpoint issues the separate antiforgery request token. A Development verification mutation proves both the source cookie and matching antiforgery token are required; checkpoint 5.4.4 now applies the same validation to scan submission.
+- Tests cover missing, malformed, unknown, expired, reused, and concurrently redeemed enrollment codes; insecure HTTP; non-loopback bootstrap; tampered cookies; cookie attributes; explicit permission; and missing/valid antiforgery tokens.
+- The non-disclosing live helper completed the full trusted-HTTPS flow against plant PostgreSQL without printing the code, cookie, antiforgery token, or generated identifiers. The ten-minute code and 30-day credential lifetimes are Development proof values, not production policy.
+- A lost exchange response cannot reproduce the generated cookie because raw credentials are never stored. Before pilot use, authorized recovery must issue replacement enrollment and revoke the inaccessible credential; the Development proof can create a new synthetic source.
 
-### 5.4.4 — Protect durable scan acceptance
+### 5.4.4 — Protect durable scan acceptance — implemented and verified
 
-- Require `scans.submit` on gateway `POST /api/scans`.
-- Resolve source scope from the authenticated local trusted-source record and compare it with the body.
-- Remove the configured single synthetic `DevelopmentSource` as the authorization authority.
-- Preserve validation, size limits, transactionality, conflict behavior, receipts, and outbox payloads.
-- Provide no unauthenticated fallback in Staging or Production.
+- Development gateway `POST /api/scans` now requires loopback HTTPS, an active enrolled browser credential, `scans.submit`, and a valid antiforgery token before it reads or accepts the scan body.
+- Tenant, plant, and station come from the local trusted-source record and must match the provisional v1 body. The configured synthetic device ID was removed from the authorization boundary and configuration.
+- The v1 `deviceId` is preserved only as untrusted compatibility metadata. It is not necessary source identity, does not restrict a station to one scanner, and will stop being mandatory in a future versioned contract.
+- Validation, size limits, the atomic observation/outbox transaction, unchanged retries, conflicts, receipts, and forwarded payloads remain intact. Authentication database outages return 503 and store nothing.
+- Tests prove authenticated barcode/RFID acceptance, idempotency, concurrency, mismatched scope, arbitrary v1 device metadata, absent credentials, missing permission, missing antiforgery, insecure transport, database outage/recovery, transaction rollback, and the Development/loopback boundary.
+- No unauthenticated fallback exists in Staging or Production. Source authentication still does not identify the operator: authenticated operator and workflow context are required before scans can count as real laundry operations.
 
 ### 5.4.5 — Offline, restart, and revocation proof
 

@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using Json.Schema;
 using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,8 +23,8 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
     {
         var json = SubmissionContractTests.Example(technology);
         json["observedAtUtc"] = "2035-01-01T12:00:00.1234567Z";
-        using var client = fixture.Application.CreateClient();
-        using var first = await client.PostAsJsonAsync("/api/scans", json);
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var first = await source.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var receipt = (await first.Content.ReadFromJsonAsync<LocalReceipt>())!;
         Assert.Equal("acceptedLocally", receipt.Status);
@@ -39,7 +40,7 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
             .Evaluate(payload.RootElement, new EvaluationOptions { RequireFormatValidation = true }).IsValid);
         await AssertPair(json);
 
-        using var retry = await client.PostAsJsonAsync("/api/scans", json);
+        using var retry = await source.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         Assert.Equal(receipt with { Status = "alreadyAcceptedLocally" }, await retry.Content.ReadFromJsonAsync<LocalReceipt>());
         Assert.Equal(stored, await Stored(json));
@@ -54,8 +55,8 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         var json = SubmissionContractTests.Example();
         var other = json.DeepClone().AsObject();
         if (conflict) other["identifier"]!["value"] = "SIMULATED-OTHER";
-        using var client = fixture.Application.CreateClient();
-        var responses = await Task.WhenAll(client.PostAsJsonAsync("/api/scans", json), client.PostAsJsonAsync("/api/scans", other));
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        var responses = await Task.WhenAll(source.PostScanAsync(json), source.PostScanAsync(other));
         try
         {
             Assert.Single(responses, x => x.StatusCode == HttpStatusCode.Created);
@@ -73,15 +74,16 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
     {
         var json = SubmissionContractTests.Example();
         using (var app = fixture.CreateApplication())
-        using (var client = app.CreateClient())
-        using (var response = await client.PostAsJsonAsync("/api/scans", json))
+        using (var source = await EnrolledSourceClient.CreateAsync(app))
+        using (var response = await source.PostScanAsync(json))
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var stored = await Stored(json);
         using var restarted = fixture.CreateApplication();
-        using var retryClient = restarted.CreateClient();
+        using var retrySource = await EnrolledSourceClient.CreateAsync(restarted);
         var reordered = new JsonObject(json.Reverse().Select(x => new KeyValuePair<string, JsonNode?>(x.Key, x.Value?.DeepClone())));
         using var content = new StringContent(reordered.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), Encoding.UTF8, "application/json");
-        using var retry = await retryClient.PostAsync("/api/scans", content);
+        using var retryRequest = new HttpRequestMessage(HttpMethod.Post, "/api/scans") { Content = content };
+        using var retry = await retrySource.SendScanAsync(retryRequest);
         Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
         Assert.Equal(stored, await Stored(json));
         using var scope = restarted.Services.CreateScope();
@@ -95,15 +97,27 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
     [InlineData("tenantId")]
     [InlineData("plantId")]
     [InlineData("stationId")]
-    [InlineData("deviceId")]
     public async Task UntrustedSourceIsRejected(string field)
     {
         var json = SubmissionContractTests.Example();
         json[field] = Guid.NewGuid().ToString();
-        using var client = fixture.Application.CreateClient();
-        using var response = await client.PostAsJsonAsync("/api/scans", json);
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var response = await source.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         Assert.Null(await Stored(json));
+    }
+
+    [Fact]
+    public async Task DeviceIdIsCaptureMetadataAndDoesNotAuthorizeTheSource()
+    {
+        var json = SubmissionContractTests.Example();
+        json["deviceId"] = Guid.NewGuid().ToString();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+
+        using var response = await source.PostScanAsync(json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.NotNull(await Stored(json));
     }
 
     [Theory]
@@ -112,16 +126,16 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
     public async Task CrossScopeCollisionDoesNotRevealOrModifyOriginal(string field)
     {
         var json = SubmissionContractTests.Example();
-        using var client = fixture.Application.CreateClient();
-        using var first = await client.PostAsJsonAsync("/api/scans", json);
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var first = await source.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var original = await Stored(json);
         var otherId = Guid.NewGuid().ToString();
         json[field] = otherId;
         using var app = fixture.CreateApplication(tenant: field == "tenantId" ? otherId : null,
             plant: field == "plantId" ? otherId : null);
-        using var otherClient = app.CreateClient();
-        using var response = await otherClient.PostAsJsonAsync("/api/scans", json);
+        using var otherSource = await EnrolledSourceClient.CreateAsync(app);
+        using var response = await otherSource.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.DoesNotContain("SIMULATED", await response.Content.ReadAsStringAsync());
         Assert.Equal(original, await Stored(json));
@@ -141,32 +155,94 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         Assert.Equal(expected, response.StatusCode);
     }
 
+    [Fact]
+    public async Task MissingSourceCookieIsUnauthorizedAndStoresNothing()
+    {
+        var json = SubmissionContractTests.Example();
+        using var client = fixture.Application.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false
+        });
+
+        using var response = await client.PostAsJsonAsync("/api/scans", json);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(await Stored(json));
+    }
+
+    [Fact]
+    public async Task MissingAntiforgeryTokenIsRejectedAndStoresNothing()
+    {
+        var json = SubmissionContractTests.Example();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+
+        using var response = await source.PostScanAsync(json, includeAntiforgery: false);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(await Stored(json));
+    }
+
+    [Fact]
+    public async Task SourceWithoutSubmitPermissionIsForbiddenAndStoresNothing()
+    {
+        var json = SubmissionContractTests.Example();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        await using (var scope = fixture.Application.Services.CreateAsyncScope())
+        {
+            var database = scope.ServiceProvider.GetRequiredService<PlantDbContext>();
+            await database.SourcePermissions.Where(x => x.SourceId == source.SourceId).ExecuteDeleteAsync();
+        }
+
+        using var response = await source.PostScanAsync(json);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(await Stored(json));
+    }
+
+    [Fact]
+    public async Task InsecureHttpIsRejectedBeforeAcceptance()
+    {
+        var json = SubmissionContractTests.Example();
+        using var client = fixture.Application.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost"),
+            AllowAutoRedirect = false
+        });
+
+        using var response = await client.PostAsJsonAsync("/api/scans", json);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(await Stored(json));
+    }
+
     [Theory]
     [InlineData("{", "application/json", HttpStatusCode.BadRequest)]
     [InlineData("null", "application/json", HttpStatusCode.BadRequest)]
     [InlineData("{}", "text/plain", HttpStatusCode.UnsupportedMediaType)]
     public async Task InvalidHttpBody(string json, string mediaType, HttpStatusCode expected)
     {
-        using var client = fixture.Application.CreateClient();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
         using var content = new StringContent(json, Encoding.UTF8, mediaType);
-        using var response = await client.PostAsync("/api/scans", content);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/scans") { Content = content };
+        using var response = await source.SendScanAsync(request);
         Assert.Equal(expected, response.StatusCode);
     }
 
     [Fact]
     public async Task CallerCannotSupplyAcceptanceTime_AndChunkedBodyIsBounded()
     {
-        using var client = fixture.Application.CreateClient();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
         var json = SubmissionContractTests.Example();
         json["gatewayAcceptedAtUtc"] = "2026-09-07T12:00:00Z";
-        using var invalid = await client.PostAsJsonAsync("/api/scans", json);
+        using var invalid = await source.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         Assert.Null(await Stored(json));
         using var content = new StreamContent(new MemoryStream(Encoding.UTF8.GetBytes(new string(' ', 16385))));
         content.Headers.ContentType = new("application/json");
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/scans") { Content = content };
         request.Headers.TransferEncodingChunked = true;
-        using var oversized = await client.SendAsync(request);
+        using var oversized = await source.SendScanAsync(request);
         Assert.Equal(HttpStatusCode.RequestEntityTooLarge, oversized.StatusCode);
     }
 
@@ -178,10 +254,10 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         var database = scope.ServiceProvider.GetRequiredService<PlantDbContext>();
         // Test-only constraint injects a failure after the observation insert.
         await database.Database.ExecuteSqlRawAsync("ALTER TABLE plant.outbox ADD CONSTRAINT test_fail_outbox CHECK (false) NOT VALID");
-        using var client = fixture.Application.CreateClient();
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
         try
         {
-            using var response = await client.PostAsJsonAsync("/api/scans", json);
+            using var response = await source.PostScanAsync(json);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
             Assert.NotNull(response.Headers.RetryAfter);
             Assert.Null(await Stored(json));
@@ -191,7 +267,7 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         {
             await database.Database.ExecuteSqlRawAsync("ALTER TABLE plant.outbox DROP CONSTRAINT test_fail_outbox");
         }
-        using var retry = await client.PostAsJsonAsync("/api/scans", json);
+        using var retry = await source.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.Created, retry.StatusCode);
         await AssertPair(json);
     }
@@ -202,14 +278,14 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         var saved = SubmissionContractTests.Example();
         var delayed = SubmissionContractTests.Example();
         delayed["observedAtUtc"] = "2020-01-01T00:00:00Z";
-        using var client = fixture.Application.CreateClient();
-        using var first = await client.PostAsJsonAsync("/api/scans", saved);
+        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var first = await source.PostScanAsync(saved);
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var original = await Stored(saved);
         await fixture.Postgres.StopAsync();
         try
         {
-            using var failure = await client.PostAsJsonAsync("/api/scans", delayed);
+            using var failure = await source.PostScanAsync(delayed);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, failure.StatusCode);
         }
         finally
@@ -220,7 +296,11 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         while (true)
         {
-            using var retry = await client.PostAsJsonAsync("/api/scans", delayed, deadline.Token);
+            using var retryRequest = new HttpRequestMessage(HttpMethod.Post, "/api/scans")
+            {
+                Content = JsonContent.Create(delayed)
+            };
+            using var retry = await source.SendScanAsync(retryRequest);
             if (retry.StatusCode == HttpStatusCode.Created) break;
             Assert.Equal(HttpStatusCode.ServiceUnavailable, retry.StatusCode);
             await Task.Delay(250, deadline.Token);
