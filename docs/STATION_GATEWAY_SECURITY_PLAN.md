@@ -103,7 +103,7 @@ Authentication and source authorization happen before the scan body reaches dura
 5. Compare the v1 body tenant, plant, and station IDs with the trusted source. A mismatch returns 403 and stores nothing. Do not treat the origin-supplied v1 `deviceId` as authentication proof.
 6. Run the existing transaction that stores immutable evidence and its outbox row before returning success.
 
-The body remains evidence supplied by the origin, but it does not grant authority. The protected endpoint retains the provisional v1 `deviceId` only for compatibility and does not use it for authorization. The approved replacement direction is a versioned request/event design with server-derived trusted-source attribution and optional equipment/capture-channel attribution where appropriate; device identity will not be mandatory.
+The body remains evidence supplied by the origin, but it does not grant authority. The protected endpoint retains the provisional v1 `deviceId` only for compatibility and does not use it for authorization. ADR 0015 and the contract package now define v2: a minimal request without caller-asserted scope or device identity, and an accepted event with gateway-derived tenant, plant, station, and source attribution. Runtime v2 support remains a separate implementation slice.
 
 Station authentication does not lock a station to receiving, dispatch, one input technology, or another operation. Operational choices and capabilities remain separate configuration. A fallback station keeps its own real trusted-source/station identity while performing an operation it is allowed and equipped to perform.
 

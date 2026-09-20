@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "eventId": "0299488e-7d9d-7390-89f5-d4ec9e4b056c",
+  "eventType": "scan.observed",
+  "correlationId": "0299488e-7d9d-7390-89f5-d4ec9e4b056c",
+  "observedAtUtc": "2026-09-20T12:01:00.000Z",
+  "identifier": {
+    "technology": "rfid",
+    "value": "SIMULATED-EPC-V2-000001"
+  }
+}

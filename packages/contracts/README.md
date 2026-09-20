@@ -26,6 +26,16 @@ The gateway prepares the acceptance timestamp and event in its transaction, and 
 
 Submit requests to the Development gateway using trusted `https://localhost:7200`, an enrolled source cookie, and its antiforgery token; the cloud on port 5100 expects accepted events instead. A retry uses the same event ID and every original field unchanged. A new physical observation gets a new ID. The HTTP receipt distinguishes `acceptedLocally` (201) and `alreadyAcceptedLocally` (200). `deliveryStatus` reports `pending`, `synchronized`, or `needsAttention` as recorded locally at the time of the receipt. Local acceptance alone does not claim synchronization or an authorized business action. Tenant/plant/station request fields must match trusted scope, not establish their own authority. The v1 `deviceId` remains unchanged evidence and is not used to authenticate a physical scanner. Authenticated operator/workflow context is required before production scans can count as laundry operations.
 
+## Scan v2 — contract defined, runtime not implemented
+
+`requests/submit-scan.v2.schema.json` is the strict minimal station-to-gateway request. Its barcode and RFID examples contain only origin-owned observation data: version, event/correlation IDs, event type, observation time, and identifier. Tenant, plant, station, source, device, gateway-acceptance, and operator fields are rejected.
+
+`events/scan-observed.v2.schema.json` is the corresponding accepted event. The gateway preserves the request fields and adds trusted `tenantId`, `plantId`, `stationId`, and `sourceId` from the authenticated `SourceIdentity`, plus `gatewayAcceptedAtUtc` after durable local acceptance. `sourceId` identifies the enrolled browser or adapter, not a physical scanner or human.
+
+No equipment or reader field is included. Optional hardware attribution can be versioned in after a real integration establishes what can be verified. Operator identity also remains separate: an authenticated operator/workflow is required before a raw observation can count as an operational action.
+
+These v2 files are design contracts only. The running gateway and cloud still accept, store, and forward v1. Do not send v2 to either API until the runtime implementation slice is complete.
+
 ## Evolution rules
 
 - Correct descriptions without changing the schema's meaning or accepted data.
@@ -33,7 +43,7 @@ Submit requests to the Development gateway using trusted `https://localhost:7200
 - Keep old schemas and their tests while any supported cloud, gateway, or station version can still produce them.
 - Never rewrite historical events merely to make them resemble a newer contract.
 
-RFID antenna data, signal strength, read aggregation, barcode symbology, operator context, device sequencing, and item resolution remain intentionally deferred until validated workflows or hardware require them.
+RFID antenna data, signal strength, read aggregation, barcode symbology, operator context, equipment attribution, device sequencing, and item resolution remain intentionally deferred until validated workflows or hardware require them.
 
 ## Validation
 

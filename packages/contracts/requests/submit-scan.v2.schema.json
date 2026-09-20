@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:laundry-operations-platform:requests:submit-scan:v2",
+  "title": "Submit scan request v2",
+  "description": "A minimal origin observation submitted by an authenticated source; the gateway supplies trusted scope, source attribution, and acceptance time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "eventType",
+    "correlationId",
+    "observedAtUtc",
+    "identifier"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "The payload schema version.",
+      "const": 2
+    },
+    "eventId": {
+      "description": "A globally unique event identifier generated at the origin and retained across retries.",
+      "$ref": "#/$defs/uuid"
+    },
+    "eventType": {
+      "description": "The stable event name.",
+      "const": "scan.observed"
+    },
+    "correlationId": {
+      "description": "Connects this observation to logs and later events in the same operation.",
+      "$ref": "#/$defs/uuid"
+    },
+    "observedAtUtc": {
+      "description": "The origin's UTC clock reading when it observed the identifier.",
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "identifier": {
+      "description": "The external identifier observed by the origin. It need not resolve to a known item.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "technology",
+        "value"
+      ],
+      "properties": {
+        "technology": {
+          "description": "The technology used to read the identifier.",
+          "enum": [
+            "barcode",
+            "rfid"
+          ]
+        },
+        "value": {
+          "description": "The identifier exactly as normalized by the producing browser or adapter.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    }
+  }
+}

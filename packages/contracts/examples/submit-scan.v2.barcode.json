@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 2,
+  "eventId": "0299488e-2b44-7d5b-8c5b-f594e3a3191b",
+  "eventType": "scan.observed",
+  "correlationId": "0299488e-2b44-7d5b-8c5b-f594e3a3191b",
+  "observedAtUtc": "2026-09-20T12:00:00.000Z",
+  "identifier": {
+    "technology": "barcode",
+    "value": "SIMULATED-BARCODE-V2-000001"
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:laundry-operations-platform:events:scan-observed:v2",
+  "title": "Scan observed event v2",
+  "description": "An immutable barcode or RFID observation enriched with trusted source scope by a plant gateway.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "eventId",
+    "eventType",
+    "correlationId",
+    "tenantId",
+    "plantId",
+    "stationId",
+    "sourceId",
+    "observedAtUtc",
+    "gatewayAcceptedAtUtc",
+    "identifier"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "description": "The payload schema version.",
+      "const": 2
+    },
+    "eventId": {
+      "description": "A globally unique event identifier generated at the origin and retained across retries.",
+      "$ref": "#/$defs/uuid"
+    },
+    "eventType": {
+      "description": "The stable event name.",
+      "const": "scan.observed"
+    },
+    "correlationId": {
+      "description": "Connects this observation to logs and later events in the same operation.",
+      "$ref": "#/$defs/uuid"
+    },
+    "tenantId": {
+      "description": "The tenant derived from the authenticated trusted source by the gateway.",
+      "$ref": "#/$defs/uuid"
+    },
+    "plantId": {
+      "description": "The plant derived from the authenticated trusted source by the gateway.",
+      "$ref": "#/$defs/uuid"
+    },
+    "stationId": {
+      "description": "The station derived from the authenticated trusted source by the gateway.",
+      "$ref": "#/$defs/uuid"
+    },
+    "sourceId": {
+      "description": "The enrolled browser or adapter source authenticated by the gateway; not a physical-device or operator identity.",
+      "$ref": "#/$defs/uuid"
+    },
+    "observedAtUtc": {
+      "description": "The origin's UTC clock reading when it observed the identifier.",
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "gatewayAcceptedAtUtc": {
+      "description": "The gateway's UTC timestamp after durable local acceptance.",
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "identifier": {
+      "description": "The external identifier observed by the origin. It need not resolve to a known item.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "technology",
+        "value"
+      ],
+      "properties": {
+        "technology": {
+          "description": "The technology used to read the identifier.",
+          "enum": [
+            "barcode",
+            "rfid"
+          ]
+        },
+        "value": {
+          "description": "The identifier exactly as normalized by the producing browser or adapter.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "\\S"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    }
+  }
+}
