@@ -1,7 +1,7 @@
 # Local gateway implementation plan
 
 Date: 2026-09-07  
-Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented. Checkpoint 5 gateway-to-cloud identity is implemented for loopback Development; station-to-gateway security and production credential lifecycle remain planned. See project status and ADRs 0005–0013 for current decisions and verification.
+Status: Overall direction and PostgreSQL storage approved by the user. Checkpoints 1–4 are implemented. Checkpoint 5 gateway-to-cloud identity is implemented for loopback Development. The source-identity direction in the [station-to-gateway security plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved; operator authentication, workflow behavior, deployment details, and implementation remain under review. Production credential lifecycle remains planned. See project status and ADRs 0005–0013 for current decisions and verification.
 
 ## Purpose and boundaries
 

@@ -33,6 +33,10 @@ A fallback workstation can perform an allowed operation while retaining its actu
 
 A raw scan observation alone does not mean receipt or dispatch. Business interpretation requires explicit operation context; lookup must not create a receiving transition. When workflow processing is introduced, preserve the operation context applicable at capture so later station configuration changes or delayed delivery do not reinterpret historical scans. The existing raw-observation v1 contract remains unchanged; the representation of workflow context is deferred to that slice.
 
+Approved source-identity direction (2026-09-20): operator and source identities remain independent. An operator can move between stations and a station can serve multiple operators across shifts. Ordinary browser installations use a separately enrolled secure station credential by default; managed installations may substitute a workstation certificate. Remote device adapters prefer unique client certificates, while adapters inside or co-located with the gateway use the applicable gateway/operating-system trust boundary. All mechanisms resolve to the same server-owned tenant/plant/station/device registration; request fields do not establish their own authority.
+
+A source credential does not identify a human, and an operator login does not by itself prove the station. The exact operator sign-in and active-workflow design is deferred. Reader signals without the required operator/workflow context must not be interpreted as completed receiving, packing, dispatch, inventory, or another operational action.
+
 - Internal IDs are immutable UUIDs.
 - Human-readable numbers are separate attributes and may follow tenant-specific sequences.
 - RFID EPC, barcode, and vendor identifiers are external identities that can be assigned, retired, or replaced.

@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-09-13
+Last updated: 2026-09-20
 
 ## Current phase
 
@@ -28,7 +28,7 @@ Checkpoint 4 is complete: Development/loopback-only `/api/sync` summary, bounded
 
 Current verification: all 160 .NET tests pass (104 gateway, 55 cloud, one cross-component scenario). The build succeeds with zero warnings/errors, and the 10 Node contract tests previously passed with unchanged contracts. Tests cover token caching and refresh, signing-key rollover and unknown-key rejection, concurrent token callers, durable recovery from identity outage and rejected credentials, scoped diagnostics, pagination, replay idempotency/concurrency, stale state/live lease rejection, audit/requeue rollback, storage outage/recovery, and replay through the gateway/cloud path without payload changes or duplicates.
 
-Checkpoint 5 security is proceeding in reviewed slices. ADR 0009 remains the broader proposed model; its offline policy is approved. Local Keycloak, development gateway identity, cloud validation, gateway token acquisition, identity outages, disabled identities, and signing-key rollover are verified (ADRs 0010–0013). Checked-in forwarding still defaults off so ordinary gateway startup requires no secret or cloud; the documented helper enables authenticated forwarding. The next planned secure slice is station-to-gateway identity and access; attributed supervisor replay, production identity hosting, and asymmetric installation credentials also remain open.
+Checkpoint 5 security is proceeding in reviewed slices. ADR 0009 remains the broader proposed model; its offline policy is approved. Local Keycloak, development gateway identity, cloud validation, gateway token acquisition, identity outages, disabled identities, and signing-key rollover are verified (ADRs 0010–0013). Checked-in forwarding still defaults off so ordinary gateway startup requires no secret or cloud; the documented helper enables authenticated forwarding. The refined source-identity direction in the [station-to-gateway identity and access plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved: secure enrollment cookie as the ordinary-browser default, optional managed workstation certificate, unique certificates for remote adapters, and gateway/OS identity for in-process or co-located adapters. Operator authentication, active workflow behavior, deployment details, and all station-security implementation remain under review. Attributed supervisor replay, production identity hosting, and asymmetric installation credentials also remain open.
 
 Produce an executable walking skeleton in which a simulated scan travels through the operator application and local gateway to the cloud API and becomes visible in an audit view.
 
