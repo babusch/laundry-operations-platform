@@ -139,12 +139,13 @@ The exact credential lifetime must exceed the agreed disconnected-operation requ
 
 Each checkpoint must leave the current repository runnable and retain the loopback boundary until its replacement has passed.
 
-### 5.4.1 — Trusted gateway HTTPS
+### 5.4.1 — Trusted gateway HTTPS — implemented and live-verified
 
-- Add a Development HTTPS listener for the gateway using trusted local certificate validation.
-- Keep the existing HTTP endpoint loopback-only during transition; do not open it to the LAN.
-- Prove valid HTTPS succeeds and untrusted/insecure transport cannot reach the future protected route.
-- Document the eventual stable plant name and certificate decision as open.
+- The Development gateway now makes trusted `https://localhost:7200` its primary listener.
+- The existing `http://localhost:5200` endpoint remains loopback-only during transition and is not exposed to the LAN.
+- A configuration test fixes HTTPS as the first address and requires every Development address to use `localhost`. A live Windows check succeeded without bypassing certificate validation, reached the plant database, accepted a synthetic scan durably over HTTPS, and found only `127.0.0.1`/`::1` listeners.
+- This checkpoint does not pretend the temporary HTTP route is secure. Rejecting insecure scan submission becomes enforceable when checkpoint 5.4.4 adds the protected route; it must be tested there before the HTTP transition listener is removed.
+- The eventual stable plant name, certificate authority, provisioning, renewal, and recovery process remain open deployment decisions.
 
 ### 5.4.2 — Source registry and authentication seam
 

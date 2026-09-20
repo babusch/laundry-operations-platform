@@ -326,13 +326,15 @@ dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Deve
 dotnet run --project apps/edge/Laundry.Edge
 ```
 
-The first command starts only the plant database. `--detach` leaves the container running in the background; `--wait` waits for its health check. The next commands restore the repository's migration tool and apply the gateway migrations, creating its durable observations, outbox, and replay audit. Repeating the migration command preserves data. The final command starts the gateway on `http://localhost:5200` with cloud forwarding off and keeps that terminal occupied. Startup does not apply migrations automatically.
+The first command starts only the plant database. `--detach` leaves the container running in the background; `--wait` waits for its health check. The next commands restore the repository's migration tool and apply the gateway migrations, creating its durable observations, outbox, and replay audit. Repeating the migration command preserves data. The final command starts the gateway primarily on trusted `https://localhost:7200`, with cloud forwarding off, and keeps that terminal occupied. Startup does not apply migrations automatically.
+
+The Development profile also retains `http://localhost:5200` temporarily so existing loopback-only work is not broken while station enrollment is built. Both addresses bind to `localhost`; neither is a LAN listener. New station-facing commands and code must use HTTPS. The HTTP address is not the permanent security model and will be removed after the protected station route has replaced it. If HTTPS reports a certificate trust error, create and trust the ASP.NET development certificate once with `dotnet dev-certs https --trust`, accept the Windows trust prompt, stop the gateway, and start it again. Never use that development certificate as a plant or production certificate.
 
 In another terminal:
 
 ```powershell
-Invoke-RestMethod http://localhost:5200/health
-Invoke-RestMethod http://localhost:5200/health/ready
+Invoke-RestMethod https://localhost:7200/health
+Invoke-RestMethod https://localhost:7200/health/ready
 ```
 
 Both should return `Healthy`:
@@ -350,10 +352,10 @@ To try a plant database outage while the gateway remains running:
 
 ```powershell
 docker compose stop plant-postgres
-Invoke-RestMethod http://localhost:5200/health
-Invoke-WebRequest http://localhost:5200/health/ready -SkipHttpErrorCheck
+Invoke-RestMethod https://localhost:7200/health
+Invoke-WebRequest https://localhost:7200/health/ready -SkipHttpErrorCheck
 docker compose up --detach --wait plant-postgres
-Invoke-RestMethod http://localhost:5200/health/ready
+Invoke-RestMethod https://localhost:7200/health/ready
 ```
 
 During the outage, expect liveness 200 and readiness 503. `-SkipHttpErrorCheck` lets PowerShell 7 display the expected failure response instead of throwing. After recovery, readiness returns `Healthy` without restarting the gateway. The named volume is preserved.
@@ -382,7 +384,7 @@ With the migration applied and gateway running, use another terminal:
 
 ```powershell
 $submission = Get-Content packages/contracts/examples/submit-scan.v1.barcode.json -Raw
-Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
+Invoke-RestMethod -Method Post -Uri https://localhost:7200/api/scans -ContentType application/json -Body $submission
 ```
 
 Expect `status: acceptedLocally`, a gateway acceptance timestamp, and `deliveryStatus: pending` when using ordinary gateway startup. Repeat the same command to see `alreadyAcceptedLocally` with the original timestamp and current recorded delivery status. When authenticated forwarding is enabled, the background worker may change the status to `synchronized` quickly. Local acceptance means saved at the plant, not a business action approved. The RFID submission example works with the same default simulator scope.
@@ -404,7 +406,7 @@ $newScan = Get-Content packages/contracts/examples/submit-scan.v1.barcode.json -
 $newScan.eventId = [guid]::NewGuid().ToString()
 $newScan.correlationId = $newScan.eventId
 $submission = $newScan | ConvertTo-Json -Depth 5
-Invoke-RestMethod -Method Post -Uri http://localhost:5200/api/scans -ContentType application/json -Body $submission
+Invoke-RestMethod -Method Post -Uri https://localhost:7200/api/scans -ContentType application/json -Body $submission
 ```
 
 ## Run authenticated gateway-to-cloud forwarding
@@ -503,8 +505,8 @@ dotnet run --project apps/edge/Laundry.Edge
 The `ReplayAudit` migration adds an audit table without changing or deleting scans. In a second terminal:
 
 ```powershell
-Invoke-RestMethod http://localhost:5200/api/sync/summary | ConvertTo-Json -Depth 5
-Invoke-RestMethod 'http://localhost:5200/api/sync/events?status=needsAttention&limit=50' | ConvertTo-Json -Depth 5
+Invoke-RestMethod https://localhost:7200/api/sync/summary | ConvertTo-Json -Depth 5
+Invoke-RestMethod 'https://localhost:7200/api/sync/events?status=needsAttention&limit=50' | ConvertTo-Json -Depth 5
 ```
 
 The summary reports pending/synchronized/needs-attention counts, oldest pending age in seconds (null when none), last confirmed cloud receipt time, forwarding enablement, and the worker's most recent iteration. A successful iteration does not mean the cloud is reachable: examine delivery states and error codes too. Worker heartbeat information resets at restart. A database failure gives HTTP 503 rather than pretending the queue is empty. Health readiness still checks plant connectivity only.
@@ -515,9 +517,9 @@ For a specific event, replace the placeholder with an ID from the list:
 
 ```powershell
 $eventId = 'PASTE-EVENT-ID-HERE'
-$record = Invoke-RestMethod "http://localhost:5200/api/sync/events/$eventId"
+$record = Invoke-RestMethod "https://localhost:7200/api/sync/events/$eventId"
 $record | ConvertTo-Json
-Invoke-RestMethod "http://localhost:5200/api/sync/events/$eventId/replays" | ConvertTo-Json -Depth 5
+Invoke-RestMethod "https://localhost:7200/api/sync/events/$eventId/replays" | ConvertTo-Json -Depth 5
 ```
 
 Review and correct the underlying issue first. Examples: `http_403` may mean mismatched source scope, `http_404` may mean the development route is disabled, and `http_409` means an event-ID conflict that resending alone will not fix. Do not change history to bypass a conflict. If the record is still `needsAttention` and a retry is justified, create one replay request:
@@ -528,7 +530,7 @@ $replay = @{
     expectedAttempts = $record.attempts
     reasonCode = 'configurationCorrected'
 } | ConvertTo-Json
-Invoke-RestMethod -Method Post -Uri "http://localhost:5200/api/sync/events/$eventId/replay" -ContentType application/json -Body $replay
+Invoke-RestMethod -Method Post -Uri "https://localhost:7200/api/sync/events/$eventId/replay" -ContentType application/json -Body $replay
 ```
 
 Allowed reasons are `configurationCorrected`, `cloudIssueResolved`, and `reviewedForRetry`. Choose the reason that actually applies. No free-text personal information is needed.

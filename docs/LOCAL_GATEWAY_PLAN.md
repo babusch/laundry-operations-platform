@@ -20,7 +20,7 @@ During development, run cloud and gateway applications on the same PC with separ
 | Plant storage | PostgreSQL, separate from cloud storage; see comparison below |
 | Persistence | EF Core, Npgsql, explicit migrations |
 | Message validation | Shared JSON Schema, JsonSchema.Net |
-| Transport | Authenticated HTTPS for gateway-to-cloud Development; local station API remains HTTP/loopback pending its security slice |
+| Transport | Authenticated HTTPS for gateway-to-cloud; trusted `https://localhost:7200` is primary for the Development station API, with `http://localhost:5200` retained as a temporary loopback-only transition path |
 | Tests | xUnit, Testcontainers, synthetic observations |
 | Development dependencies | Root Docker Compose orchestration |
 | Diagnostics | Correlation-aware logs, health checks, delivery status; no sensitive payload logging |

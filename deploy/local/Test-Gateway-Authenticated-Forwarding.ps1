@@ -9,14 +9,14 @@ $scan.correlationId = $eventId.ToString()
 $scan.observedAtUtc = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
 $submission = $scan | ConvertTo-Json -Depth 5 -Compress
 
-$accepted = Invoke-RestMethod -Method Post -Uri 'http://localhost:5200/api/scans' `
+$accepted = Invoke-RestMethod -Method Post -Uri 'https://localhost:7200/api/scans' `
     -ContentType 'application/json' -Body $submission -TimeoutSec 10
 if ($accepted.status -cne 'acceptedLocally') { throw 'The gateway did not durably accept the synthetic scan.' }
 
 $deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)
 do {
     Start-Sleep -Milliseconds 250
-    $diagnostic = Invoke-RestMethod -Uri "http://localhost:5200/api/sync/events/$eventId" -TimeoutSec 5
+    $diagnostic = Invoke-RestMethod -Uri "https://localhost:7200/api/sync/events/$eventId" -TimeoutSec 5
 } while ($diagnostic.status -eq 'pending' -and [DateTimeOffset]::UtcNow -lt $deadline)
 
 if ($diagnostic.status -ne 'synchronized') {
