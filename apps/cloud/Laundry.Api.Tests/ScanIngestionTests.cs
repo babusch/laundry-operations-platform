@@ -224,11 +224,14 @@ public sealed class ScanIngestionTests(ScanIngestionFixture fixture) : IClassFix
     }
 
     [Theory]
-    [InlineData("barcode")]
-    [InlineData("rfid")]
-    public async Task ValidScanIsPersistedBeforeAcknowledgement_AndReplayReturnsSameReceipt(string technology)
+    [InlineData("barcode", 1)]
+    [InlineData("rfid", 1)]
+    [InlineData("barcode", 2)]
+    [InlineData("rfid", 2)]
+    public async Task ValidScanIsPersistedBeforeAcknowledgement_AndReplayReturnsSameReceipt(
+        string technology, int version)
     {
-        var json = ScanContractTests.Example(technology);
+        var json = ScanContractTests.Example(technology, version);
         json["observedAtUtc"] = "2026-09-07T12:00:00.1234567Z";
         using var client = fixture.CreateAuthorizedClient();
         using var first = await client.PostAsJsonAsync("/api/scans", json);
@@ -240,6 +243,8 @@ public sealed class ScanIngestionTests(ScanIngestionFixture fixture) : IClassFix
         Assert.NotNull(stored);
         Assert.Equal(receipt.CloudReceivedAtUtc, stored.CloudReceivedAtUtc);
         Assert.NotNull(stored.PayloadJson);
+        Assert.Equal(version == 1, stored.DeviceId.HasValue);
+        Assert.Equal(version == 2, stored.SourceId.HasValue);
 
         // Model a lost acknowledgement: the sender repeats the unchanged event.
         using var retry = await client.PostAsJsonAsync("/api/scans", json);

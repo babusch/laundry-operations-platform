@@ -19,6 +19,7 @@ public sealed class ScanDbContext(DbContextOptions<ScanDbContext> options) : DbC
         scan.Property(x => x.PlantId).HasColumnName("plant_id");
         scan.Property(x => x.StationId).HasColumnName("station_id");
         scan.Property(x => x.DeviceId).HasColumnName("device_id");
+        scan.Property(x => x.SourceId).HasColumnName("source_id");
         scan.Property(x => x.ObservedAtUtc).HasColumnName("observed_at_utc");
         scan.Property(x => x.GatewayAcceptedAtUtc).HasColumnName("gateway_accepted_at_utc");
         scan.Property(x => x.CloudReceivedAtUtc).HasColumnName("cloud_received_at_utc");

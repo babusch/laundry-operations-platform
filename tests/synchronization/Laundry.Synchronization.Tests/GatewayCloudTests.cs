@@ -77,9 +77,11 @@ public sealed class GatewayCloudTests
         var submission = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "submission.json")))!;
         var firstId = Guid.NewGuid();
         submission["eventId"] = firstId.ToString();
+        string sourceCookie;
         using (var edge = Edge(true))
         using (var source = await EnrollSourceAsync(edge))
         {
+            sourceCookie = source.SourceCookie;
             using var response = await source.PostScanAsync(submission);
             Assert.Equal(HttpStatusCode.Created, response.StatusCode);
             await WaitFor(async () =>
@@ -99,7 +101,7 @@ public sealed class GatewayCloudTests
 
         network.Reachable = true;
         using var restarted = Edge(true);
-        using var restartedSource = await EnrollSourceAsync(restarted);
+        using var restartedSource = await ResumeSourceAsync(restarted, sourceCookie);
         var restartedClient = restartedSource.Client;
         await WaitFor(async () =>
         {
@@ -163,7 +165,7 @@ public sealed class GatewayCloudTests
         {
             BaseAddress = new Uri("https://localhost"),
             AllowAutoRedirect = false,
-            HandleCookies = true
+            HandleCookies = false
         });
         try
         {
@@ -173,8 +175,7 @@ public sealed class GatewayCloudTests
             using var exchange = await client.PostAsJsonAsync("/api/source-enrollment/exchange",
                 new { enrollmentCode = enrollment.EnrollmentCode });
             Assert.Equal(HttpStatusCode.NoContent, exchange.StatusCode);
-            var session = (await client.GetFromJsonAsync<SessionResponse>("/api/source-session"))!;
-            return new SourceClient(client, session.AntiforgeryHeaderName, session.AntiforgeryToken);
+            return await CreateSourceSessionAsync(client, ReadCookie(exchange, "__Host-laundry-source"));
         }
         catch
         {
@@ -183,9 +184,52 @@ public sealed class GatewayCloudTests
         }
     }
 
-    private sealed class SourceClient(HttpClient client, string header, string token) : IDisposable
+    private static async Task<SourceClient> ResumeSourceAsync(WebApplicationFactory<Program> application,
+        string sourceCookie)
+    {
+        var client = application.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false,
+            HandleCookies = false
+        });
+        try
+        {
+            return await CreateSourceSessionAsync(client, sourceCookie);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+    }
+
+    private static async Task<SourceClient> CreateSourceSessionAsync(HttpClient client, string sourceCookie)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/source-session");
+        request.Headers.Add("Cookie", sourceCookie);
+        using var response = await client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var session = (await response.Content.ReadFromJsonAsync<SessionResponse>())!;
+        var antiforgeryCookie = ReadCookie(response, "__Host-laundry-source-csrf");
+        client.DefaultRequestHeaders.Add("Cookie", $"{sourceCookie}; {antiforgeryCookie}");
+        return new SourceClient(client, sourceCookie, session.AntiforgeryHeaderName,
+            session.AntiforgeryToken);
+    }
+
+    private static string ReadCookie(HttpResponseMessage response, string name)
+    {
+        var header = response.Headers.GetValues("Set-Cookie").Single(value =>
+            value.StartsWith(name + "=", StringComparison.Ordinal));
+        var separator = header.IndexOf(';');
+        return separator < 0 ? header : header[..separator];
+    }
+
+    private sealed class SourceClient(HttpClient client, string sourceCookie, string header,
+        string token) : IDisposable
     {
         public HttpClient Client { get; } = client;
+        public string SourceCookie { get; } = sourceCookie;
 
         public Task<HttpResponseMessage> PostScanAsync(JsonNode submission)
         {

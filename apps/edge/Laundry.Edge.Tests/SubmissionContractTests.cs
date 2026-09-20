@@ -9,7 +9,7 @@ public sealed class SubmissionContractTests
     public static JsonObject Example(string technology = "barcode")
     {
         var json = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
-            "Contracts", $"submit-scan.v1.{technology}.json")))!.AsObject();
+            "Contracts", $"submit-scan.v2.{technology}.json")))!.AsObject();
         json["eventId"] = Guid.NewGuid().ToString();
         return json;
     }
@@ -47,7 +47,7 @@ public sealed class SubmissionContractTests
     public void InvalidVersionIdentifierAndDuplicatePropertiesAreRejected()
     {
         var json = Example();
-        json["schemaVersion"] = 2;
+        json["schemaVersion"] = 1;
         Assert.False(Valid(json));
         foreach (var value in new[] { "", "  ", new string('x', 513) })
         {
@@ -58,7 +58,7 @@ public sealed class SubmissionContractTests
         json = Example();
         json["identifier"]!["technology"] = "unknown";
         Assert.False(Valid(json));
-        var raw = Example().ToJsonString().Insert(1, "\"schemaVersion\":1,");
+        var raw = Example().ToJsonString().Insert(1, "\"schemaVersion\":2,");
         using var document = JsonDocument.Parse(raw);
         Assert.False(new SubmissionValidator().IsValid(document.RootElement));
     }

@@ -36,7 +36,7 @@ namespace Laundry.Api.Integrations.Scans.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("correlation_id");
 
-                    b.Property<Guid>("DeviceId")
+                    b.Property<Guid?>("DeviceId")
                         .HasColumnType("uuid")
                         .HasColumnName("device_id");
 
@@ -74,6 +74,10 @@ namespace Laundry.Api.Integrations.Scans.Migrations
                     b.Property<int>("SchemaVersion")
                         .HasColumnType("integer")
                         .HasColumnName("schema_version");
+
+                    b.Property<Guid?>("SourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_id");
 
                     b.Property<Guid>("StationId")
                         .HasColumnType("uuid")

@@ -40,7 +40,7 @@ Accepted means the raw observation was recorded, not that a movement, production
 
 ### Submission versus accepted-event contract
 
-The implemented `packages/contracts/requests/submit-scan.v1.schema.json` excludes `gatewayAcceptedAtUtc`, which the origin cannot know. The gateway assigns that value when preparing durable acceptance and produces the existing `scan.observed.v1` event. Unchanged retries return the original receipt and acceptance timestamp. Conflicting reuse of an ID is rejected without overwriting history.
+The implemented `packages/contracts/requests/submit-scan.v2.schema.json` contains only origin-owned observation data. The gateway derives tenant, plant, station, and source from the authenticated `SourceIdentity`, assigns `gatewayAcceptedAtUtc`, and produces `scan.observed.v2`. Unchanged retries from the same source return the original receipt and acceptance timestamp. Conflicting reuse of an ID, including reuse by another source, is rejected without overwriting history. Historical v1 events remain cloud-readable and are forwarded unchanged.
 
 ### Failure behavior
 

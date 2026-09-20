@@ -1,0 +1,129 @@
+openapi: 3.1.0
+info:
+  title: Laundry station gateway API
+  version: 1.0.0
+  description: Development contract used to generate the station PWA client.
+paths:
+  /api/scans:
+    post:
+      operationId: submitScan
+      summary: Durably submit a raw scan observation
+      security:
+        - sourceCookie: []
+          antiforgeryHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitScanV2"
+      responses:
+        "200":
+          description: The unchanged event was already accepted locally.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalReceipt"
+        "201":
+          description: The event was durably accepted locally.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalReceipt"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "409":
+          $ref: "#/components/responses/Problem"
+        "413":
+          $ref: "#/components/responses/Problem"
+        "415":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+components:
+  securitySchemes:
+    sourceCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-laundry-source
+      description: Secure enrolled-source cookie managed by the browser.
+    antiforgeryHeader:
+      type: apiKey
+      in: header
+      name: X-Laundry-CSRF
+      description: Antiforgery token obtained from the authenticated source session.
+  schemas:
+    SubmitScanV2:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - eventId
+        - eventType
+        - correlationId
+        - observedAtUtc
+        - identifier
+      properties:
+        schemaVersion:
+          $ref: ../../../../packages/contracts/requests/submit-scan.v2.schema.json#/properties/schemaVersion
+        eventId:
+          $ref: ../../../../packages/contracts/requests/submit-scan.v2.schema.json#/properties/eventId
+        eventType:
+          $ref: ../../../../packages/contracts/requests/submit-scan.v2.schema.json#/properties/eventType
+        correlationId:
+          $ref: ../../../../packages/contracts/requests/submit-scan.v2.schema.json#/properties/correlationId
+        observedAtUtc:
+          $ref: ../../../../packages/contracts/requests/submit-scan.v2.schema.json#/properties/observedAtUtc
+        identifier:
+          $ref: ../../../../packages/contracts/requests/submit-scan.v2.schema.json#/properties/identifier
+    LocalReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - status
+        - gatewayAcceptedAtUtc
+        - deliveryStatus
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - acceptedLocally
+            - alreadyAcceptedLocally
+        gatewayAcceptedAtUtc:
+          type: string
+          format: date-time
+        deliveryStatus:
+          type: string
+          enum:
+            - pending
+            - synchronized
+            - needsAttention
+    ProblemDetails:
+      type: object
+      additionalProperties: true
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+  responses:
+    Problem:
+      description: The request was not accepted.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetails"

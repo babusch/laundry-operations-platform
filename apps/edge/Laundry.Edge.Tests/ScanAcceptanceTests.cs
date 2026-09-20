@@ -36,7 +36,8 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
         using var payload = JsonDocument.Parse(stored.EventJson);
         Assert.Equal(json["observedAtUtc"]!.GetValue<string>(), payload.RootElement.GetProperty("observedAtUtc").GetString());
         Assert.Equal(receipt.GatewayAcceptedAtUtc, payload.RootElement.GetProperty("gatewayAcceptedAtUtc").GetDateTimeOffset());
-        using var schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Contracts", "scan-observed.v1.schema.json")));
+        Assert.Equal(source.SourceId, payload.RootElement.GetProperty("sourceId").GetGuid());
+        using var schema = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Contracts", "scan-observed.v2.schema.json")));
         Assert.True(JsonSchema.Build(schema.RootElement.Clone(), new BuildOptions { SchemaRegistry = new() })
             .Evaluate(payload.RootElement, new EvaluationOptions { RequireFormatValidation = true }).IsValid);
         await AssertPair(json);
@@ -116,45 +117,30 @@ public sealed class ScanAcceptanceTests(AcceptanceFixture fixture) : IClassFixtu
     [InlineData("tenantId")]
     [InlineData("plantId")]
     [InlineData("stationId")]
-    public async Task UntrustedSourceIsRejected(string field)
+    [InlineData("sourceId")]
+    [InlineData("deviceId")]
+    public async Task CallerCannotSupplyGatewayOwnedAttribution(string field)
     {
         var json = SubmissionContractTests.Example();
         json[field] = Guid.NewGuid().ToString();
         using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
         using var response = await source.PostScanAsync(json);
-        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Null(await Stored(json));
     }
 
     [Fact]
-    public async Task DeviceIdIsCaptureMetadataAndDoesNotAuthorizeTheSource()
+    public async Task SameEventAndPayloadFromDifferentSourceConflictsAndPreservesOriginal()
     {
         var json = SubmissionContractTests.Example();
-        json["deviceId"] = Guid.NewGuid().ToString();
-        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
-
-        using var response = await source.PostScanAsync(json);
-
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        Assert.NotNull(await Stored(json));
-    }
-
-    [Theory]
-    [InlineData("tenantId")]
-    [InlineData("plantId")]
-    public async Task CrossScopeCollisionDoesNotRevealOrModifyOriginal(string field)
-    {
-        var json = SubmissionContractTests.Example();
-        using var source = await EnrolledSourceClient.CreateAsync(fixture.Application);
-        using var first = await source.PostScanAsync(json);
+        using var firstSource = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var secondSource = await EnrolledSourceClient.CreateAsync(fixture.Application);
+        using var first = await firstSource.PostScanAsync(json);
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var original = await Stored(json);
-        var otherId = Guid.NewGuid().ToString();
-        json[field] = otherId;
-        using var app = fixture.CreateApplication(tenant: field == "tenantId" ? otherId : null,
-            plant: field == "plantId" ? otherId : null);
-        using var otherSource = await EnrolledSourceClient.CreateAsync(app);
-        using var response = await otherSource.PostScanAsync(json);
+
+        using var response = await secondSource.PostScanAsync(json);
+
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.DoesNotContain("SIMULATED", await response.Content.ReadAsStringAsync());
         Assert.Equal(original, await Stored(json));

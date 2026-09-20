@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$scan = Get-Content (Join-Path $repositoryRoot 'packages/contracts/examples/submit-scan.v1.barcode.json') -Raw |
+$scan = Get-Content (Join-Path $repositoryRoot 'packages/contracts/examples/submit-scan.v2.barcode.json') -Raw |
     ConvertFrom-Json
 $eventId = [guid]::NewGuid()
 $scan.eventId = $eventId.ToString()

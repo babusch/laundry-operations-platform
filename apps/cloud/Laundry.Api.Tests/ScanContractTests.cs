@@ -8,24 +8,28 @@ public sealed class ScanContractTests
 {
     private readonly ScanContractValidator _validator = new();
 
-    internal static JsonObject Example(string technology = "barcode")
+    internal static JsonObject Example(string technology = "barcode", int version = 1)
     {
         var json = JsonNode.Parse(File.ReadAllText(Path.Combine(
-            AppContext.BaseDirectory, "Contracts", $"scan-observed.v1.{technology}.json")))!.AsObject();
+            AppContext.BaseDirectory, "Contracts", $"scan-observed.v{version}.{technology}.json")))!.AsObject();
         json["eventId"] = Guid.NewGuid();
         return json;
     }
 
     [Theory]
-    [InlineData("barcode")]
-    [InlineData("rfid")]
-    public void CheckedInExamplesAreValid(string technology) =>
-        Assert.True(Valid(Example(technology)));
+    [InlineData("barcode", 1)]
+    [InlineData("rfid", 1)]
+    [InlineData("barcode", 2)]
+    [InlineData("rfid", 2)]
+    public void CheckedInExamplesAreValid(string technology, int version) =>
+        Assert.True(Valid(Example(technology, version)));
 
-    [Fact]
-    public void EveryRequiredPropertyIsEnforced()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void EveryRequiredPropertyIsEnforced(int version)
     {
-        var json = Example();
+        var json = Example(version: version);
         foreach (var name in json.Select(x => x.Key).ToArray())
         {
             var incomplete = json.DeepClone().AsObject();
@@ -64,11 +68,23 @@ public sealed class ScanContractTests
     public void WrongVersionAndOversizedIdentifierAreRejected()
     {
         var json = Example();
-        json["schemaVersion"] = 2;
+        json["schemaVersion"] = 3;
         Assert.False(Valid(json));
         json["schemaVersion"] = 1;
         json["identifier"]!["value"] = new string('x', 513);
         Assert.False(Valid(json));
+    }
+
+    [Fact]
+    public void VersionNumberCannotDisguisePayloadFromAnotherVersion()
+    {
+        var v2 = Example(version: 2);
+        v2["schemaVersion"] = 1;
+        Assert.False(Valid(v2));
+
+        var v1 = Example();
+        v1["schemaVersion"] = 2;
+        Assert.False(Valid(v1));
     }
 
     private bool Valid(JsonNode json)

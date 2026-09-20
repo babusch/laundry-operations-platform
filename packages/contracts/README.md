@@ -18,15 +18,15 @@ The event deliberately contains observation facts rather than item master data:
 
 The synthetic examples contain no real customer or tag data.
 
-## Submit scan v1
+## Scan v1 — historical compatibility
 
-`requests/submit-scan.v1.schema.json` is the station-to-gateway request, with synthetic `submit-scan.v1.barcode.json` and `submit-scan.v1.rfid.json` examples. It contains the observation fields but rejects `gatewayAcceptedAtUtc`: the gateway owns that timestamp. Both submission examples use the default development simulator values. This provisional contract predates the approved trusted-source boundary; do not infer that its required `deviceId` proves which keyboard-wedge scanner emitted input. The authenticated endpoint deliberately ignores `deviceId` for authorization. A future version will remove mandatory device identity and keep equipment/capture attribution optional.
+Status: **legacy and frozen**. No new station client or PWA may adopt v1. Its schemas and examples remain so historical stored events can still be validated, delivered, and replayed unchanged.
 
-The gateway prepares the acceptance timestamp and event in its transaction, and exposes them only after commit. The stored accepted event satisfies `scan-observed.v1` and is forwarded unchanged. Source timestamps and identifier strings are not rewritten. Tests keep the request's common field definitions aligned with the event contract.
+`requests/submit-scan.v1.schema.json` records the retired station request for interpretation and tests. This provisional contract predates the approved trusted-source boundary; its required `deviceId` never proved which keyboard-wedge scanner emitted input.
 
-Submit requests to the Development gateway using trusted `https://localhost:7200`, an enrolled source cookie, and its antiforgery token; the cloud on port 5100 expects accepted events instead. A retry uses the same event ID and every original field unchanged. A new physical observation gets a new ID. The HTTP receipt distinguishes `acceptedLocally` (201) and `alreadyAcceptedLocally` (200). `deliveryStatus` reports `pending`, `synchronized`, or `needsAttention` as recorded locally at the time of the receipt. Local acceptance alone does not claim synchronization or an authorized business action. Tenant/plant/station request fields must match trusted scope, not establish their own authority. The v1 `deviceId` remains unchanged evidence and is not used to authenticate a physical scanner. Authenticated operator/workflow context is required before production scans can count as laundry operations.
+The gateway no longer accepts new v1 requests. Existing `scan-observed.v1` events remain immutable, and cloud ingestion continues accepting them while delivery, replay, or retention obligations exist.
 
-## Scan v2 — contract defined, runtime not implemented
+## Scan v2 — current station and gateway contract
 
 `requests/submit-scan.v2.schema.json` is the strict minimal station-to-gateway request. Its barcode and RFID examples contain only origin-owned observation data: version, event/correlation IDs, event type, observation time, and identifier. Tenant, plant, station, source, device, gateway-acceptance, and operator fields are rejected.
 
@@ -34,7 +34,7 @@ Submit requests to the Development gateway using trusted `https://localhost:7200
 
 No equipment or reader field is included. Optional hardware attribution can be versioned in after a real integration establishes what can be verified. Operator identity also remains separate: an authenticated operator/workflow is required before a raw observation can count as an operational action.
 
-These v2 files are design contracts only. The running gateway and cloud still accept, store, and forward v1. Do not send v2 to either API until the runtime implementation slice is complete.
+Submit v2 requests to the Development gateway using trusted `https://localhost:7200`, an enrolled source cookie, and its antiforgery token. The gateway validates v2 only, durably stores the request and enriched event with one pending outbox row, then acknowledges it. A retry uses the same event ID and every original request field unchanged, from the same enrolled source. The cloud accepts both current v2 and historical v1 events.
 
 ## Evolution rules
 
@@ -42,6 +42,7 @@ These v2 files are design contracts only. The running gateway and cloud still ac
 - Create a new schema version when adding or removing a field, making an optional field required, changing a field's meaning or representation, or otherwise changing accepted data. The strict v1 schema rejects unknown fields so accidental payload growth is visible.
 - Keep old schemas and their tests while any supported cloud, gateway, or station version can still produce them.
 - Never rewrite historical events merely to make them resemble a newer contract.
+- Freezing a producer version does not remove its schema: consumers may need it to validate retained, queued, or replayed historical events.
 
 RFID antenna data, signal strength, read aggregation, barcode symbology, operator context, equipment attribution, device sequencing, and item resolution remain intentionally deferred until validated workflows or hardware require them.
 

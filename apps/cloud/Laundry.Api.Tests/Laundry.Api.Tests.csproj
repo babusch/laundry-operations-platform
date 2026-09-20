@@ -27,6 +27,8 @@
   <ItemGroup>
     <None Include="../../../packages/contracts/examples/scan-observed.v1.*.json"
           Link="Contracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../packages/contracts/examples/scan-observed.v2.*.json"
+          Link="Contracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

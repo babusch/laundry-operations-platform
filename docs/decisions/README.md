@@ -20,6 +20,8 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0013 — Gateway acquires short-lived development tokens](0013-gateway-acquires-short-lived-tokens.md)
 - [0014 — Authenticate local scan submission](0014-authenticate-local-scan-submission.md)
 - [0015 — Minimal request and trusted event for scan v2](0015-minimal-trusted-scan-v2-contract.md)
+- [0016 — Retire v1 for new station submissions](0016-retire-v1-station-submission.md)
+- [0017 — Activate trusted scan v2](0017-activate-trusted-scan-v2.md)
 
 ## Template
 

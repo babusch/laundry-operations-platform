@@ -76,14 +76,6 @@ public static class ScanAcceptanceEndpoint
             using var document = JsonDocument.Parse(buffer.AsMemory(0, count), new JsonDocumentOptions { MaxDepth = 8 });
             var json = document.RootElement;
             if (!validator.IsValid(json)) return InvalidScan();
-            if (json.GetProperty("tenantId").GetGuid() != source.TenantId ||
-                json.GetProperty("plantId").GetGuid() != source.PlantId ||
-                json.GetProperty("stationId").GetGuid() != source.StationId)
-                return Results.Problem(statusCode: 403,
-                    title: "Scan scope does not match the authenticated trusted source.");
-
-            // The provisional v1 deviceId is untrusted capture metadata, not source identity.
-            // A future request version will remove the mandatory field.
 
             // Match the cloud storage adapter's representation limits before accepting locally.
             _ = json.GetProperty("observedAtUtc").GetDateTimeOffset();
@@ -94,6 +86,10 @@ public static class ScanAcceptanceEndpoint
             // PostgreSQL stores microseconds. Use the same precision in the event and receipt.
             var acceptedAt = new DateTimeOffset(now.Ticks - now.Ticks % 10, TimeSpan.Zero);
             var acceptedEvent = JsonNode.Parse(json.GetRawText())!.AsObject();
+            acceptedEvent["tenantId"] = source.TenantId.ToString();
+            acceptedEvent["plantId"] = source.PlantId.ToString();
+            acceptedEvent["stationId"] = source.StationId.ToString();
+            acceptedEvent["sourceId"] = source.SourceId.ToString();
             acceptedEvent["gatewayAcceptedAtUtc"] = acceptedAt.UtcDateTime.ToString("O");
             scan = new LocalObservation
             {
@@ -131,7 +127,8 @@ public static class ScanAcceptanceEndpoint
             var stored = await database.Observations.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.EventId == scan.EventId && x.TenantId == source.TenantId && x.PlantId == source.PlantId,
                 cancellationToken);
-            if (stored is null || !SamePayload(stored.SubmissionJson, scan.SubmissionJson))
+            if (stored is null || !SamePayload(stored.SubmissionJson, scan.SubmissionJson) ||
+                !SameSource(stored.EventJson, source))
             {
                 logger.LogWarning("Local scan conflict: event {EventId}, correlation {CorrelationId}.", scan.EventId, correlationId);
                 return Results.Problem(statusCode: 409, title: "Event ID conflicts with an existing observation.");
@@ -153,13 +150,30 @@ public static class ScanAcceptanceEndpoint
     }
 
     private static IResult InvalidScan() => Results.Problem(statusCode: 400,
-        title: "Body must be a supported submit-scan v1 request without a gateway acceptance timestamp.");
+        title: "Body must be a supported submit-scan v2 request without gateway-owned attribution.");
 
     private static bool SamePayload(string left, string right)
     {
         using var original = JsonDocument.Parse(left);
         using var incoming = JsonDocument.Parse(right);
         return JsonElement.DeepEquals(original.RootElement, incoming.RootElement);
+    }
+
+    private static bool SameSource(string eventJson, SourceIdentity source)
+    {
+        try
+        {
+            using var stored = JsonDocument.Parse(eventJson);
+            var root = stored.RootElement;
+            return root.GetProperty("tenantId").GetGuid() == source.TenantId &&
+                   root.GetProperty("plantId").GetGuid() == source.PlantId &&
+                   root.GetProperty("stationId").GetGuid() == source.StationId &&
+                   root.GetProperty("sourceId").GetGuid() == source.SourceId;
+        }
+        catch (Exception exception) when (exception is JsonException or FormatException or KeyNotFoundException)
+        {
+            return false;
+        }
     }
 
     private static bool IsStorageUnavailable(Exception exception)

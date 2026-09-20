@@ -414,7 +414,7 @@ The helper enrolls a simulated browser source, submits a fresh barcode observati
 
 The gateway transaction saves the scan plus an outbox entry (a durable to-do item for cloud delivery). If either write fails, neither commits. A background worker delivers stored events without changing their payloads and records confirmed cloud receipts. Application and database restarts preserve these records.
 
-The Development-only endpoint requires loopback HTTPS, an active enrolled source cookie, `scans.submit`, and the matching antiforgery token. Trusted tenant, plant, and station scope comes from the source record and must match the provisional v1 body. The v1 `deviceId` is preserved only as untrusted compatibility metadata; it is neither required source identity nor authorization and will become optional in a future contract. The endpoint rejects caller-supplied gateway timestamps, source mismatches (403), invalid submissions (400), conflicting ID reuse (409), oversized bodies (413), and non-JSON content (415). A storage or authentication-database error returns 503 with a retry hint; keep the same submission because the commit outcome may be uncertain. The endpoint remains loopback-only while production enrollment, operator sessions, and plant certificate deployment are designed.
+The Development-only endpoint requires loopback HTTPS, an active enrolled source cookie, `scans.submit`, and the matching antiforgery token. It accepts only `submit-scan.v2`, which contains origin observation data but no tenant, plant, station, source, device, or gateway-time claims. The gateway adds trusted tenant/plant/station/source attribution from the source record and produces `scan.observed.v2`. It rejects caller-supplied gateway-owned fields (400), conflicting event-ID reuse—including reuse from another source—(409), oversized bodies (413), and non-JSON content (415). A storage or authentication-database error returns 503 with a retry hint; keep the same submission because the commit outcome may be uncertain. The endpoint remains loopback-only while production enrollment, operator sessions, and plant certificate deployment are designed.
 
 Inspect pending delivery bookkeeping without printing tag values:
 
@@ -570,3 +570,28 @@ corepack pnpm test:contracts
 ```
 
 The first install creates or updates `pnpm-lock.yaml`. Commit that lockfile so every environment resolves the same dependency versions.
+
+## Station application foundation
+
+The first station-PWA slice is scaffolded under `apps/station-pwa`. It currently shows only a clearly labelled Development simulator shell and deliberately sends no scans. Source enrollment, scan controls, service-worker installation, and browser offline storage are not implemented yet.
+
+The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document currently describes only `POST /api/scans` and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
+
+```powershell
+corepack pnpm generate:api-client
+```
+
+Run the focused checks and production build:
+
+```powershell
+corepack pnpm test:station
+corepack pnpm build:station
+```
+
+To view the empty shell during development:
+
+```powershell
+corepack pnpm dev:station
+```
+
+Open the local URL printed by Vite and stop it with `Ctrl+C`. This development server is not yet connected to the HTTPS gateway.

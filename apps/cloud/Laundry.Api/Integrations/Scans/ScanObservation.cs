@@ -10,7 +10,8 @@ public sealed record ScanObservation
     public required Guid TenantId { get; init; }
     public required Guid PlantId { get; init; }
     public required Guid StationId { get; init; }
-    public required Guid DeviceId { get; init; }
+    public Guid? DeviceId { get; init; }
+    public Guid? SourceId { get; init; }
     public required DateTimeOffset ObservedAtUtc { get; init; }
     public required DateTimeOffset GatewayAcceptedAtUtc { get; init; }
     public required DateTimeOffset CloudReceivedAtUtc { get; init; }

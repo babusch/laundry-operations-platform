@@ -3,7 +3,11 @@
   "private": true,
   "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "test:contracts": "pnpm --filter @laundry/contracts test"
+    "build:station": "pnpm --filter @laundry/station-pwa build",
+    "dev:station": "pnpm --filter @laundry/station-pwa dev",
+    "generate:api-client": "pnpm --filter @laundry/api-client generate",
+    "test:contracts": "pnpm --filter @laundry/contracts test",
+    "test:station": "pnpm --filter @laundry/api-client typecheck && pnpm --filter @laundry/station-pwa test && pnpm --filter @laundry/station-pwa typecheck"
   },
   "engines": {
     "node": ">=24.20.0 <25"

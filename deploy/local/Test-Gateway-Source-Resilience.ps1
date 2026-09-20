@@ -64,7 +64,7 @@ try {
         -WebSession $session -TimeoutSec 10
     $headers = @{ $sourceSession.antiforgeryHeaderName = $sourceSession.antiforgeryToken }
     $scan = Get-Content (Join-Path $repositoryRoot `
-        'packages/contracts/examples/submit-scan.v1.barcode.json') -Raw | ConvertFrom-Json
+        'packages/contracts/examples/submit-scan.v2.barcode.json') -Raw | ConvertFrom-Json
     $eventId = [guid]::NewGuid()
     $scan.eventId = $eventId.ToString()
     $scan.correlationId = $eventId.ToString()
@@ -96,7 +96,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Could not revoke the synthetic source: $updateOutput" }
 
     $rejectedScan = Get-Content (Join-Path $repositoryRoot `
-        'packages/contracts/examples/submit-scan.v1.barcode.json') -Raw | ConvertFrom-Json
+        'packages/contracts/examples/submit-scan.v2.barcode.json') -Raw | ConvertFrom-Json
     $rejectedEventId = [guid]::NewGuid()
     $rejectedScan.eventId = $rejectedEventId.ToString()
     $rejectedScan.correlationId = $rejectedEventId.ToString()

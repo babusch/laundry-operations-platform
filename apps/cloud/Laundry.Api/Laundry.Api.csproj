@@ -21,6 +21,8 @@
   <ItemGroup>
     <EmbeddedResource Include="../../../packages/contracts/events/scan-observed.v1.schema.json"
                       LogicalName="Contracts.ScanObservedV1.json" />
+    <EmbeddedResource Include="../../../packages/contracts/events/scan-observed.v2.schema.json"
+                      LogicalName="Contracts.ScanObservedV2.json" />
   </ItemGroup>
 
 </Project>

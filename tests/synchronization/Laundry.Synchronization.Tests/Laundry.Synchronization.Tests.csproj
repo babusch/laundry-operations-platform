@@ -14,6 +14,6 @@
     <Using Include="Xunit" />
     <ProjectReference Include="../../../apps/edge/Laundry.Edge/Laundry.Edge.csproj" />
     <ProjectReference Include="../../../apps/cloud/Laundry.Api/Laundry.Api.csproj" Aliases="cloud" />
-    <None Include="../../../packages/contracts/examples/submit-scan.v1.barcode.json" Link="submission.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../packages/contracts/examples/submit-scan.v2.barcode.json" Link="submission.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

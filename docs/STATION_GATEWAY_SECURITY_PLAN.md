@@ -99,11 +99,11 @@ Authentication and source authorization happen before the scan body reaches dura
 1. Require an authenticated source with `scans.submit`.
 2. Load its active trusted-source record from plant PostgreSQL.
 3. Derive tenant, plant, and station from that trusted-source record.
-4. Validate the existing `submit-scan.v1` body.
-5. Compare the v1 body tenant, plant, and station IDs with the trusted source. A mismatch returns 403 and stores nothing. Do not treat the origin-supplied v1 `deviceId` as authentication proof.
-6. Run the existing transaction that stores immutable evidence and its outbox row before returning success.
+4. Validate the minimal `submit-scan.v2` body, which cannot contain scope, source, device, or gateway-time fields.
+5. Enrich it with trusted tenant, plant, station, and source attribution to create `scan.observed.v2`.
+6. Run the transaction that stores immutable evidence and its outbox row before returning success.
 
-The body remains evidence supplied by the origin, but it does not grant authority. The protected endpoint retains the provisional v1 `deviceId` only for compatibility and does not use it for authorization. ADR 0015 and the contract package now define v2: a minimal request without caller-asserted scope or device identity, and an accepted event with gateway-derived tenant, plant, station, and source attribution. Runtime v2 support remains a separate implementation slice.
+The request remains evidence supplied by the origin, but it does not grant authority. ADRs 0015–0017 define and activate v2: a minimal request without caller-asserted scope or device identity, and an accepted event with gateway-derived tenant, plant, station, and source attribution. Cloud support for v1 remains only for immutable historical events.
 
 Station authentication does not lock a station to receiving, dispatch, one input technology, or another operation. Operational choices and capabilities remain separate configuration. A fallback station keeps its own real trusted-source/station identity while performing an operation it is allowed and equipped to perform.
 
@@ -171,10 +171,10 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 ### 5.4.4 — Protect durable scan acceptance — implemented and verified
 
 - Development gateway `POST /api/scans` now requires loopback HTTPS, an active enrolled browser credential, `scans.submit`, and a valid antiforgery token before it reads or accepts the scan body.
-- Tenant, plant, and station come from the local trusted-source record and must match the provisional v1 body. The configured synthetic device ID was removed from the authorization boundary and configuration.
-- The v1 `deviceId` is preserved only as untrusted compatibility metadata. It is not necessary source identity, does not restrict a station to one scanner, and will stop being mandatory in a future versioned contract.
+- Tenant, plant, station, and source come only from the local trusted-source record and are added to accepted v2 events by the gateway. Station requests cannot assert them.
+- New station requests contain no `deviceId`. A station is not restricted to one scanner; historical v1 device metadata remains unchanged but is not authentication proof.
 - Validation, size limits, the atomic observation/outbox transaction, unchanged retries, conflicts, receipts, and forwarded payloads remain intact. Authentication database outages return 503 and store nothing.
-- Tests prove authenticated barcode/RFID acceptance, idempotency, concurrency, mismatched scope, arbitrary v1 device metadata, absent credentials, missing permission, missing antiforgery, insecure transport, database outage/recovery, transaction rollback, and the Development/loopback boundary.
+- Tests prove authenticated barcode/RFID v2 acceptance and enrichment, same-source idempotency, different-source conflicts, concurrency, rejection of caller-owned authority fields, absent credentials, missing permission, missing antiforgery, insecure transport, database outage/recovery, transaction rollback, and the Development/loopback boundary.
 - No unauthenticated fallback exists in Staging or Production. Source authentication still does not identify the operator: authenticated operator and workflow context are required before scans can count as real laundry operations.
 
 ### 5.4.5 — Offline, restart, and revocation proof — implemented and live-verified

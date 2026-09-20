@@ -85,17 +85,19 @@ public static class ScanIngestionEndpoint
             var identifier = json.GetProperty("identifier");
             var value = identifier.GetProperty("value").GetString()!;
             if (value.Contains('\0')) return InvalidScan();
+            var schemaVersion = json.GetProperty("schemaVersion").GetInt32();
 
             scan = new ScanObservation
             {
                 EventId = json.GetProperty("eventId").GetGuid(),
-                SchemaVersion = 1,
+                SchemaVersion = schemaVersion,
                 EventType = "scan.observed",
                 CorrelationId = json.GetProperty("correlationId").GetGuid(),
                 TenantId = source.TenantId,
                 PlantId = source.PlantId,
                 StationId = json.GetProperty("stationId").GetGuid(),
-                DeviceId = json.GetProperty("deviceId").GetGuid(),
+                DeviceId = schemaVersion == 1 ? json.GetProperty("deviceId").GetGuid() : null,
+                SourceId = schemaVersion == 2 ? json.GetProperty("sourceId").GetGuid() : null,
                 ObservedAtUtc = json.GetProperty("observedAtUtc").GetDateTimeOffset(),
                 GatewayAcceptedAtUtc = json.GetProperty("gatewayAcceptedAtUtc").GetDateTimeOffset(),
                 CloudReceivedAtUtc = clock.GetUtcNow(),
@@ -116,11 +118,11 @@ public static class ScanIngestionEndpoint
             var inserted = await database.Database.ExecuteSqlInterpolatedAsync($"""
                 INSERT INTO integrations.scan_observations
                     (event_id, schema_version, event_type, correlation_id, tenant_id, plant_id,
-                     station_id, device_id, observed_at_utc, gateway_accepted_at_utc,
+                     station_id, device_id, source_id, observed_at_utc, gateway_accepted_at_utc,
                      cloud_received_at_utc, identifier_technology, identifier_value, payload_json)
                 VALUES
                     ({scan.EventId}, {scan.SchemaVersion}, {scan.EventType}, {scan.CorrelationId},
-                     {scan.TenantId}, {scan.PlantId}, {scan.StationId}, {scan.DeviceId},
+                     {scan.TenantId}, {scan.PlantId}, {scan.StationId}, {scan.DeviceId}, {scan.SourceId},
                      {scan.ObservedAtUtc}, {scan.GatewayAcceptedAtUtc}, {scan.CloudReceivedAtUtc},
                      {scan.IdentifierTechnology}, {scan.IdentifierValue}, {scan.PayloadJson})
                 ON CONFLICT (event_id) DO NOTHING
@@ -153,7 +155,7 @@ public static class ScanIngestionEndpoint
     }
 
     private static IResult InvalidScan() =>
-        Results.Problem(statusCode: 400, title: "Body must be a supported scan.observed v1 observation.");
+        Results.Problem(statusCode: 400, title: "Body must be a supported scan.observed observation.");
 
     private static bool SamePayload(string left, string right)
     {

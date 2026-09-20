@@ -10,7 +10,7 @@ public sealed class SubmissionValidator
     public SubmissionValidator()
     {
         using var stream = typeof(SubmissionValidator).Assembly
-            .GetManifestResourceStream("Contracts.SubmitScanV1.json")
+            .GetManifestResourceStream("Contracts.SubmitScanV2.json")
             ?? throw new InvalidOperationException("The scan contract is missing from the application.");
         using var document = JsonDocument.Parse(stream);
         _schema = JsonSchema.Build(document.RootElement.Clone(), new BuildOptions

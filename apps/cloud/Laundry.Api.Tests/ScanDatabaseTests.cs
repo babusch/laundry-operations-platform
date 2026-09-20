@@ -39,11 +39,13 @@ public sealed class ScanDatabaseTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData("barcode")]
-    [InlineData("rfid")]
-    public async Task ContractExample_RoundTripsThroughPostgres(string technology)
+    [InlineData("barcode", 1)]
+    [InlineData("rfid", 1)]
+    [InlineData("barcode", 2)]
+    [InlineData("rfid", 2)]
+    public async Task ContractExample_RoundTripsThroughPostgres(string technology, int version)
     {
-        var scan = ReadExample(technology);
+        var scan = ReadExample(technology, version);
         await InsertAsync(scan);
 
         using var scope = _application.Services.CreateScope();
@@ -187,10 +189,10 @@ public sealed class ScanDatabaseTests : IAsyncLifetime
         await database.SaveChangesAsync();
     }
 
-    private static ScanObservation ReadExample(string technology)
+    private static ScanObservation ReadExample(string technology, int version = 1)
     {
         using var document = JsonDocument.Parse(File.ReadAllText(
-            Path.Combine(AppContext.BaseDirectory, "Contracts", $"scan-observed.v1.{technology}.json")));
+            Path.Combine(AppContext.BaseDirectory, "Contracts", $"scan-observed.v{version}.{technology}.json")));
         var json = document.RootElement;
         return new ScanObservation
         {
@@ -201,7 +203,8 @@ public sealed class ScanDatabaseTests : IAsyncLifetime
             TenantId = json.GetProperty("tenantId").GetGuid(),
             PlantId = json.GetProperty("plantId").GetGuid(),
             StationId = json.GetProperty("stationId").GetGuid(),
-            DeviceId = json.GetProperty("deviceId").GetGuid(),
+            DeviceId = version == 1 ? json.GetProperty("deviceId").GetGuid() : null,
+            SourceId = version == 2 ? json.GetProperty("sourceId").GetGuid() : null,
             ObservedAtUtc = json.GetProperty("observedAtUtc").GetDateTimeOffset(),
             GatewayAcceptedAtUtc = json.GetProperty("gatewayAcceptedAtUtc").GetDateTimeOffset(),
             CloudReceivedAtUtc = DateTimeOffset.Parse("2026-09-07T12:00:00Z"),
