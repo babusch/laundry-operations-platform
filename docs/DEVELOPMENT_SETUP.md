@@ -370,6 +370,18 @@ Both should return `Healthy`:
 
 Readiness does not yet prove write capacity, correct migrations, or scan acceptance. It deliberately does not check the cloud. Missing or unavailable database configuration produces HTTP 503 with `Unhealthy`; liveness remains healthy.
 
+### Run the station Development simulator
+
+Keep the plant database and gateway running, then open another terminal at the repository root:
+
+```powershell
+corepack pnpm dev:station
+```
+
+Open `http://127.0.0.1:5173`. The station shell checks gateway readiness through a development-only `/gateway` proxy. It shows one of three explicit states: checking, ready, or unavailable. An unavailable state includes a manual retry. "Gateway ready" means only that the local gateway can reach plant PostgreSQL; it does not claim cloud connectivity, current migrations, write capacity, source enrollment, or scan acceptance.
+
+This slice sends no scans and stores no emergency queue. The proxy exists only in the Vite development server; a deployed plant installation will require its own reviewed same-origin or gateway-routing configuration.
+
 The Development connection string `ConnectionStrings:Plant` uses database `laundry_plant`, user `laundry_edge`, local-only password `laundry_edge_local_dev_only`, and port 15433. Other environments must provide `ConnectionStrings__Plant`; do not expose this unauthenticated foundation over the network. The launch profile binds to localhost. If you override `PLANT_POSTGRES_*` in `.env`, also supply a matching `ConnectionStrings__Plant` in the gateway terminal: ASP.NET Core does not automatically read `.env`.
 
 To try a plant database outage while the gateway remains running:

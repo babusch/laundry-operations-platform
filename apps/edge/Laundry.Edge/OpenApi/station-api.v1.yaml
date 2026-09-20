@@ -4,6 +4,23 @@ info:
   version: 1.0.0
   description: Development contract used to generate the station PWA client.
 paths:
+  /health/ready:
+    get:
+      operationId: getGatewayReadiness
+      summary: Check whether durable plant storage is available
+      responses:
+        "200":
+          description: The gateway process and plant storage are ready.
+          content:
+            text/plain:
+              schema:
+                type: string
+        "503":
+          description: The gateway is running but plant storage is unavailable.
+          content:
+            text/plain:
+              schema:
+                type: string
   /api/scans:
     post:
       operationId: submitScan

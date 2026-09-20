@@ -54,14 +54,28 @@ h1 {
   line-height: 1;
 }
 
-.status-line {
+.connection-status {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
   margin: 2rem 0 0;
+  padding: 1rem;
+  border: 0.125rem solid #b8c2bb;
+  border-radius: 0.875rem;
+  background: #f4f7f4;
+}
+
+.status-line {
+  margin: 0;
   font-size: clamp(1.125rem, 2.5vw, 1.5rem);
   font-weight: 650;
   line-height: 1.25;
+}
+
+.status-detail {
+  margin: 0.4rem 0 0;
+  color: #435149;
+  line-height: 1.5;
 }
 
 .status-mark {
@@ -73,6 +87,46 @@ h1 {
   border-radius: 50%;
   color: #ffffff;
   background: #17643b;
+}
+
+.connection-status--checking .status-mark {
+  color: #15221b;
+  background: #dfe5e0;
+}
+
+.connection-status--unavailable {
+  border-color: #c7897c;
+  background: #fff4f1;
+}
+
+.connection-status--unavailable .status-mark {
+  background: #a33420;
+}
+
+.retry-button {
+  min-width: 10rem;
+  min-height: 3.25rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1.25rem;
+  border: 0.125rem solid #173d29;
+  border-radius: 0.75rem;
+  color: #ffffff;
+  background: #1d5435;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.retry-button:hover {
+  background: #173f2a;
+}
+
+.retry-button:active {
+  transform: scale(0.98);
+}
+
+.retry-button:focus-visible {
+  outline: 0.2rem solid #0b68d1;
+  outline-offset: 0.2rem;
 }
 
 .scope-note {
@@ -97,11 +151,26 @@ h1 {
   .scope-note {
     color: #000000;
   }
+
+  .connection-status {
+    border-color: #000000;
+    background: #ffffff;
+  }
+
+  .status-detail {
+    color: #000000;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
   .foundation {
     background: #ffffff;
     box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .retry-button:active {
+    transform: none;
   }
 }
