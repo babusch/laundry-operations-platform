@@ -1,6 +1,7 @@
 using Laundry.Edge.Health;
 using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
+using Laundry.Edge.Security;
 using Laundry.Edge.Synchronization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,7 @@ builder.Services.AddSingleton<IGatewayTokenProvider>(services => new GatewayToke
 builder.Services.AddHttpClient<CloudDelivery>().ConfigurePrimaryHttpMessageHandler(() =>
     new HttpClientHandler { AllowAutoRedirect = false, UseProxy = false });
 builder.Services.AddScoped<OutboxDispatcher>();
+builder.Services.AddScoped<ISourceIdentityResolver, SourceIdentityResolver>();
 builder.Services.AddHostedService<OutboxWorker>();
 
 builder.Services.AddDbContext<PlantDbContext>(options =>

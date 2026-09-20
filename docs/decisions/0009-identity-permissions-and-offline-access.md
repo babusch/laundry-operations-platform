@@ -5,7 +5,7 @@ Date: 2026-09-08
 
 Review update (2026-09-08): the user approved the offline-access policy below. Identity mechanisms, provider selection, and implementation details remain under review; this is not approval to implement the entire proposal.
 
-Source-identity review update (2026-09-20): the user approved the refined station/device direction. Use a separately enrolled source identity in addition to any operator session. An opaque secure cookie is the default for an ordinary browser installation; a managed workstation certificate may replace it where certificate deployment is available. Remote managed adapters prefer unique client certificates, while in-process or co-located adapters use the gateway or operating-system trust boundary. Exact operator sign-in, active workflow, deployment, and implementation choices remain under review.
+Source-identity review update (2026-09-20): the user approved the refined source direction. Use a separately enrolled source identity in addition to any operator session. An opaque secure cookie is the default for an ordinary browser installation; a managed workstation certificate may replace it where certificate deployment is available. Remote managed adapters prefer unique client certificates, while in-process or co-located adapters use the gateway or operating-system trust boundary. Bind the trusted source to tenant, plant, and station, not to one mandatory physical device. A station may use several inputs; optional equipment inventory remains separate and is added only for a validated hardware-management need. Exact operator sign-in, active workflow, and deployment choices remain under review.
 
 Implementation update (2026-09-09): ADRs 0010–0012 establish local Keycloak, a development gateway identity, and cloud-side JWT validation. The gateway does not yet acquire tokens, and production provider/credentials remain undecided.
 
@@ -16,13 +16,13 @@ Checkpoint 5 replaces local-development trust with authenticated communication. 
 ## Proposed identities and ownership
 
 - Gateway: a unique machine identity registered to exactly one tenant and plant initially. Replacing a computer creates a new credential/enrollment; historical events retain their original identities. Do not silently reassign a gateway with queued events to another plant.
-- Station/device: locally enrolled source identity, mapped to allowed station/device IDs at one plant. Fixed-reader adapters may run under gateway-managed credentials. Network address, JSON identifiers, and forwarded headers are not proof of identity.
+- Station/source: locally enrolled browser installation or adapter, mapped to one station at one plant. Fixed-reader adapters may run under gateway-managed credentials. Network address, JSON identifiers, optional physical-equipment claims, and forwarded headers are not proof of identity.
 - Human: a stable subject plus issuer, with tenant/plant memberships and explicit permissions. Human identity is separate from station and gateway identity. Machine credentials cannot authorize human administrative operations.
 - The cloud and gateway each enforce permissions at their own boundary. Database access remains private. Browser code must never contain a reusable gateway machine secret.
 
 ## Proposed permissions
 
-Here, source means the registered origin of a scan: its tenant, plant, logical station (for example, dirty receiving), and physical device or enrolled adapter. A source cannot claim another station/device merely by changing JSON fields. Authorized enrollment can change hardware assignments without changing the shared contract or hard-coding a vendor.
+Here, source means the enrolled browser installation or adapter that originates a request: it is assigned to one tenant, plant, and logical station (for example, dirty receiving). A source cannot claim another station merely by changing JSON fields. A station may use several physical inputs; those are not automatically authenticated equipment identities.
 
 Station clarification approved by the user on 2026-09-08: source identity does not impose a fixed operational role. Stations may be dedicated, flexible, or default-with-switching according to configuration, applicable permissions, and hardware capabilities. Performing receiving at an alternative station retains that station's real identity. See [DOMAIN.md](../DOMAIN.md#station-identity-and-operational-purpose); workflow-context implementation remains deferred and does not change the current scan contract.
 
@@ -31,7 +31,7 @@ Diagnostics are synchronization health and troubleshooting information: queued/s
 | Principal | Permission | Scope |
 |---|---|---|
 | Registered gateway | `scans.ingest` at cloud | Its registered tenant/plant only |
-| Enrolled station or device adapter | `scans.submit` at gateway | Its permitted station/device source |
+| Enrolled browser installation or adapter | `scans.submit` at gateway | Its assigned tenant, plant, and station |
 | Authorized diagnostic viewer | `sync.read` | Explicit tenant/plant membership |
 | Authorized supervisor | `sync.read`, `sync.replay` | Explicit tenant/plant membership |
 | Authorized enrollment administrator | Enroll/revoke identities | Explicit managed plants; no implicit global access |
@@ -95,4 +95,4 @@ Update: the user approved product-managed identity and local Keycloak evaluation
 
 Machine identity is separate from human audit attribution; a cloud authentication outage cannot discard local evidence. Operating trusted offline sources necessarily permits delayed knowledge of central revocation. If workflow or risk requirements demand immediate revocation, revisit the offline availability promise explicitly instead of silently violating it.
 
-Implementation update: ADRs 0010–0013 now prove local Keycloak, a scoped Development gateway identity, cloud token validation, and gateway acquisition/caching of short-lived tokens. Station authentication, attributed supervisor replay, production identity hosting, and production credential lifecycle remain later slices.
+Implementation update: ADRs 0010–0013 now prove local Keycloak, a scoped Development gateway identity, cloud token validation, and gateway acquisition/caching of short-lived tokens. Checkpoints 5.4.1–5.4.2 add trusted Development gateway HTTPS plus the empty-by-default local trusted-source/credential/permission/enrollment/audit schema and project-owned `SourceIdentity` seam. No equipment table, browser credential, or scan-route authorization is added yet. Browser enrollment, attributed supervisor replay, production identity hosting, and production credential lifecycle remain later slices.

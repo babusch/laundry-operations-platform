@@ -8,7 +8,7 @@ Create a professional industrial laundry platform that gives operators a fast an
 
 The first laundry is a pilot for a reusable product, not a customer-specific codebase. Support different companies (tenants), multiple plants, and differing scanner/hardware installations through the same maintained core.
 
-- Configure company/plant identity, stations, device assignments, and supported operational variations rather than hard-coding pilot values or creating per-customer forks.
+- Configure company/plant identity, stations, trusted sources, optional equipment assignments, and supported operational variations rather than hard-coding pilot values or creating per-customer forks.
 - Keep vendor protocols and SDKs behind hardware adapters that produce the shared scan contract. Replacing supported hardware should require configuration/enrollment, not domain changes.
 - Make installation, configuration, upgrades, and recovery repeatable and documented. Validate supported device models, operating systems, and connection methods; arbitrary hardware is not automatically compatible.
 - Deliver this incrementally using the pilot's real workflow and a simulator. Do not build a speculative universal workflow engine or every hardware adapter upfront.
@@ -21,7 +21,7 @@ Station behavior is configurable: dedicated operation, flexible operation select
 - Supervisor: manages exceptions, production flow, quality, and staffing decisions.
 - Driver: performs collections, deliveries, and proof of delivery.
 - Customer user: views orders, stock, deliveries, discrepancies, and documents.
-- Plant administrator: configures stations, devices, workflows, and local users.
+- Plant administrator: configures stations, trusted sources, workflows, local users, and equipment where the installation needs explicit equipment management.
 - Platform administrator: manages tenants, plants, integrations, and support access.
 
 ## Core operational journey
@@ -36,7 +36,7 @@ Station behavior is configurable: dedicated operation, flexible operation select
 8. Delivery and proof of delivery
 9. Reconciliation and billing
 
-Every material transition must be traceable to time, plant, station/device, operator when applicable, and the affected physical or aggregate unit.
+Every material transition must be traceable to time, plant, trusted source/station, operator when applicable, and the affected physical or aggregate unit. Attribute specific equipment only when that identity is actually available; do not describe keyboard-like input as authenticated hardware.
 
 ## Initial product boundary
 

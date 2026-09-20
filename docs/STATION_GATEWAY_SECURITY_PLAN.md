@@ -1,7 +1,7 @@
 # Station-to-gateway identity and access plan
 
 Date: 2026-09-14  
-Status: Source-identity direction approved 2026-09-20; operator authentication, workflow behavior, deployment details, and implementation remain under review
+Status: Source-identity direction and refined device boundary approved 2026-09-20; operator authentication, workflow behavior, and deployment details remain under review
 
 ## Goal
 
@@ -21,7 +21,7 @@ Use one source-authorization model with different authenticators for different c
 | Separate adapter process on the gateway computer | Operating-system-protected local IPC and service identity | Avoids unnecessary network credentials while retaining a controlled process boundary |
 | Adapter running inside the gateway service | Gateway-managed internal principal | It is already inside the trusted process boundary and must not invent identity through JSON |
 
-All authenticators produce the same internal `SourceIdentity`: credential ID, tenant ID, plant ID, station ID, device ID, principal type, permission set, and registration status. The scan module depends on that project-owned result, not on cookies, certificates, Keycloak types, or vendor SDKs.
+All authenticators produce the same internal `SourceIdentity`: source ID, credential ID, tenant ID, plant ID, station ID, principal type, permission set, and configuration version. The scan module depends on that project-owned result, not on cookies, certificates, Keycloak types, physical-device claims, or vendor SDKs.
 
 Start implementation with one simulated browser station using the default cookie mechanism. Keep station authentication replaceable so a managed installation can use a workstation certificate without changing scan-domain rules. Add the adapter certificate authenticator only after confirming the first fixed-reader operating system, SDK process model, and certificate deployment capability. This keeps the boundary extensible without speculatively integrating hardware.
 
@@ -30,11 +30,14 @@ Every operational request ultimately needs both trustworthy source identity and 
 ## Important identity separation
 
 - A **station identity** answers where the request originated.
-- A **device identity** identifies the physical reader or enrolled adapter when that can be established.
+- A **trusted-source identity** identifies the enrolled browser installation or adapter that submitted the request.
+- An **equipment identity** may identify a physical reader, scale, or machine when the integration can actually establish it; it is optional and separate from source authentication.
 - A **human identity** answers who performed or authorized work; its mechanism is not introduced by this slice and cannot be replaced by a source credential.
 - An **operation** says what the user intends to do. It remains configurable and is not implied by station identity.
 
-For a keyboard-wedge scanner, the browser can prove the enrolled workstation installation but usually cannot cryptographically prove the scanner's manufacturer serial number. Its configured `deviceId` therefore represents that enrolled input source. A networked fixed-reader adapter can have its own independently enrolled credential.
+For a keyboard-wedge scanner, the browser proves only the enrolled browser installation. Keystrokes do not reliably identify which physical scanner produced them. A networked fixed-reader adapter can have its own independently enrolled credential, but that proves the adapter rather than every downstream reader unless the integration establishes those identities separately.
+
+A station may use barcode, RFID, scales, and other inputs concurrently. Source authentication therefore binds an enrolled source to tenant, plant, and station—not to one mandatory physical device. Do not add a general equipment table in checkpoint 5.4.2. Add optional equipment inventory later only for a concrete configuration, health, maintenance, calibration, movement, or independently verified identity requirement.
 
 An operator may use several stations, and several operators may use the same station across shifts. Therefore the station credential and operator session remain logically separate and have separate enrollment, sign-out, rotation, and revocation lifecycles. If a managed station certificate identifies the workstation, no additional station cookie is required; the operator session still remains separate.
 
@@ -54,14 +57,14 @@ Client-certificate authentication is negotiated at the TLS connection, not per r
 
 ## Browser-station enrollment flow
 
-1. An authorized administrator selects an existing tenant, plant, station, and configured input device and creates a short-lived, single-use enrollment code.
+1. An authorized administrator selects an existing tenant, plant, and station and creates a short-lived, single-use enrollment code for one browser installation.
 2. The station opens the PWA from the gateway's trusted HTTPS address and enters or scans that code.
 3. The gateway consumes the code atomically and creates a high-entropy random station credential.
 4. The gateway stores only a digest of the secret and returns the credential in a host-only `Secure`, `HttpOnly`, `SameSite=Strict` cookie.
 5. Subsequent API requests resolve that credential against the local plant database on every request. Disabled, revoked, unknown, or expired credentials do not authenticate.
 6. Unsafe cookie-authenticated requests also require ASP.NET Core antiforgery validation. CORS, JSON content type, or `SameSite` alone are not treated as complete CSRF protection.
 
-The cookie authenticates the browser installation, not a person. Human sign-in can later add a separate user principal/session without changing the station registration.
+The cookie authenticates the browser installation, not a person. Human sign-in can later add a separate user principal/session without changing the trusted-source record.
 
 Because checkpoint 5.5 human administration is not built yet, the first Development proof may use an explicit loopback-only command to create one enrollment code. That bootstrap must be unavailable outside Development and must not become a production administrative bypass.
 
@@ -80,12 +83,12 @@ URLs, IP addresses, MAC addresses, request JSON, or an operator-selected station
 When a real adapter on another computer or LAN-connected host is selected:
 
 1. Generate or provision a unique keypair for that adapter; never share one fleet-wide private key.
-2. Register its certificate/public key against exactly one source registration.
+2. Associate its certificate/public key with exactly one trusted source.
 3. Connect to a dedicated gateway HTTPS listener that requests and validates client certificates.
-4. Validate certificate chain or explicit local trust, intended client-authentication use, validity period, and the active local registration.
+4. Validate certificate chain or explicit local trust, intended client-authentication use, validity period, and the active local trusted source.
 5. Resolve the certificate to the same `SourceIdentity` used by browser stations.
 
-Private keys stay in the adapter's operating-system or hardware-backed key store where available. The database stores public certificate material or a stable public-key fingerprint, never the private key. Local registration status provides immediate plant revocation without requiring an online certificate-revocation service.
+Private keys stay in the adapter's operating-system or hardware-backed key store where available. The database stores public certificate material or a stable public-key fingerprint, never the private key. Local trusted-source status provides immediate plant revocation without requiring an online certificate-revocation service.
 
 An adapter running inside the gateway process uses a gateway-managed internal principal. A separate adapter process on the same gateway computer should prefer operating-system-protected IPC and service identity when the target OS supports it. Mutual TLS is primarily for a managed adapter crossing a machine or network boundary, not a requirement for every scanner process.
 
@@ -94,15 +97,15 @@ An adapter running inside the gateway process uses a gateway-managed internal pr
 Authentication and source authorization happen before the scan body reaches durable acceptance:
 
 1. Require an authenticated source with `scans.submit`.
-2. Load its active source registration from plant PostgreSQL.
-3. Derive tenant, plant, station, and device from that registration.
+2. Load its active trusted-source record from plant PostgreSQL.
+3. Derive tenant, plant, and station from that trusted-source record.
 4. Validate the existing `submit-scan.v1` body.
-5. Compare all four body source IDs with the trusted registration. A mismatch returns 403 and stores nothing.
+5. Compare the v1 body tenant, plant, and station IDs with the trusted source. A mismatch returns 403 and stores nothing. Do not treat the origin-supplied v1 `deviceId` as authentication proof.
 6. Run the existing transaction that stores immutable evidence and its outbox row before returning success.
 
-The body remains evidence supplied by the origin, but it does not grant authority. Initially retaining and comparing its source fields avoids changing the shared contract. A later contract version may remove redundant caller-selected scope if experience supports that change.
+The body remains evidence supplied by the origin, but it does not grant authority. The provisional v1 contract still requires `deviceId`; leave that contract unchanged during 5.4.2, describe the value as limited-assurance capture metadata, and design a versioned replacement before checkpoint 5.4.4 protects the endpoint. That replacement should carry server-derived trusted-source attribution and make equipment/capture-channel attribution optional where appropriate.
 
-Station authentication does not lock a station to receiving, dispatch, or another operation. Operational choices and capabilities remain separate configuration. A fallback station keeps its own real station/device identity while performing an operation it is allowed and equipped to perform.
+Station authentication does not lock a station to receiving, dispatch, one input technology, or another operation. Operational choices and capabilities remain separate configuration. A fallback station keeps its own real trusted-source/station identity while performing an operation it is allowed and equipped to perform.
 
 Machine credentials cannot call synchronization diagnostics, request replay, enroll another source, or act as a human. Those endpoints require their own policies.
 
@@ -110,12 +113,13 @@ Machine credentials cannot call synchronization diagnostics, request replay, enr
 
 Add explicit migrations for a small local source-security model:
 
-- `source_registrations`: stable source ID, tenant/plant/station/device mapping, source kind, status, and configuration version.
-- `source_credentials`: credential ID, registration ID, credential kind, secret digest or public-certificate identity, issued/expiry times, status, rotation overlap, and revocation time.
-- `source_enrollment_codes`: digest, intended registration, expiry, redemption time, and single-use state.
+- `trusted_sources`: stable source ID, tenant/plant/station mapping, source kind, status, and configuration version.
+- `source_credentials`: credential ID, source ID, credential kind, secret digest or public-certificate identity, issued/expiry times, status, rotation overlap, and revocation time.
+- `source_permissions`: explicit machine permissions; initially only `scans.submit`.
+- `source_enrollment_codes`: digest, intended source, expiry, redemption time, and single-use state.
 - `source_security_audit`: append-only enrollment, credential rotation, local revoke/restore, and failed administrative actions, with an authenticated actor or an explicit Development system actor.
 
-One source can have overlapping credentials during rotation. Reassigning a credential to another tenant, plant, station, or device is forbidden; create a new registration/credential instead. Historical scan events retain their original source fields.
+One source can have overlapping credentials during rotation. Reassigning a credential to another tenant, plant, or station is forbidden; create a new trusted source and credential instead. Historical scan events retain their original evidence.
 
 Do not store raw browser credentials, enrollment codes, private keys, scan identifiers, or human-entered free text in these tables or logs.
 
@@ -147,12 +151,13 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 - This checkpoint does not pretend the temporary HTTP route is secure. Rejecting insecure scan submission becomes enforceable when checkpoint 5.4.4 adds the protected route; it must be tested there before the HTTP transition listener is removed.
 - The eventual stable plant name, certificate authority, provisioning, renewal, and recovery process remain open deployment decisions.
 
-### 5.4.2 — Source registry and authentication seam
+### 5.4.2 — Source registry and authentication seam — implemented and verified
 
-- Add migrations for source registrations, credentials, enrollment codes, and security audit.
-- Add a project-owned `SourceIdentity` and authenticator abstraction.
-- Seed no reusable credential in Git or application settings.
-- Test tenant/plant isolation, immutable assignment, credential rotation overlap, and local revocation.
+- The additive `TrustedSourceSecurityFoundation` migration creates trusted sources, credentials, explicit permissions, enrollment codes, and append-only security audit. It adds no general equipment/device table and seeds no source or credential.
+- The project-owned `SourceIdentity`, `ISourceAuthenticator`, and `ISourceIdentityResolver` keep cookie, certificate, operating-system, and internal authenticators behind one boundary. `SourceIdentity` contains source, credential, tenant, plant, station, principal type, configuration version, and permissions—never a mandatory physical-device ID.
+- The resolver accepts only a credential that a future authenticator has already verified, requires active and currently valid credential/source records, and restricts resolution to the gateway's tenant and plant.
+- Application persistence rejects tenant/plant/station/kind reassignment, immutable credential-verifier changes, and modification or deletion of source-security audit records. Rotation creates another credential and can retain a bounded active overlap.
+- Tests prove tenant/plant isolation, explicit permission resolution, credential lifecycle and overlap, immediate local disable/revocation, immutable source scope, and append-only audit. Browser credential issuance and scan authorization intentionally remain later checkpoints.
 
 ### 5.4.3 — One simulated browser enrollment
 
@@ -165,7 +170,7 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 ### 5.4.4 — Protect durable scan acceptance
 
 - Require `scans.submit` on gateway `POST /api/scans`.
-- Resolve source scope from the authenticated local registration and compare it with the body.
+- Resolve source scope from the authenticated local trusted-source record and compare it with the body.
 - Remove the configured single synthetic `DevelopmentSource` as the authorization authority.
 - Preserve validation, size limits, transactionality, conflict behavior, receipts, and outbox payloads.
 - Provide no unauthenticated fallback in Staging or Production.
@@ -189,7 +194,7 @@ Each checkpoint must leave the current repository runnable and retain the loopba
 
 - A newly enrolled simulated browser station submits over trusted HTTPS.
 - Missing, invalid, expired, revoked, and wrong-source credentials store no observation or outbox row.
-- The gateway derives and enforces tenant/plant/station/device scope from local registration.
+- The gateway derives and enforces tenant/plant/station scope from the local trusted source. Optional equipment attribution is not authentication proof.
 - Dedicated, flexible, and default-with-switching station behavior remains possible; authentication does not choose the operation.
 - WAN, cloud, and Keycloak outages do not stop a valid enrolled station from obtaining durable local acceptance.
 - Non-Development enrollment and privilege changes are not possible through an offline or unauthenticated bypass; the temporary Development bootstrap remains loopback-only and explicitly attributed as a system action.

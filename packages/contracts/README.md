@@ -11,7 +11,7 @@ The event deliberately contains observation facts rather than item master data:
 - `eventId` is generated at the origin and must remain unchanged across retries.
 - `eventType` is always `scan.observed` for this schema.
 - `correlationId` connects this observation to related logs and later events.
-- Tenant, plant, station, and device IDs establish the source boundary.
+- Tenant, plant, and station IDs describe the source boundary. The provisional v1 `deviceId` is origin-supplied capture metadata with limited assurance; it is not physical-device authentication.
 - `observedAtUtc` is the source clock reading.
 - `gatewayAcceptedAtUtc` is recorded only after durable local acceptance.
 - `identifier` records either a barcode or RFID value and may be unknown to the system.
@@ -20,11 +20,11 @@ The synthetic examples contain no real customer or tag data.
 
 ## Submit scan v1
 
-`requests/submit-scan.v1.schema.json` is the station-to-gateway request, with synthetic `submit-scan.v1.barcode.json` and `submit-scan.v1.rfid.json` examples. It contains the observation fields but rejects `gatewayAcceptedAtUtc`: the gateway owns that timestamp. Both submission examples use the default development simulator station/device tuple.
+`requests/submit-scan.v1.schema.json` is the station-to-gateway request, with synthetic `submit-scan.v1.barcode.json` and `submit-scan.v1.rfid.json` examples. It contains the observation fields but rejects `gatewayAcceptedAtUtc`: the gateway owns that timestamp. Both submission examples use the default development simulator station/device tuple. This provisional contract predates the approved trusted-source boundary; do not infer that its required `deviceId` proves which keyboard-wedge scanner emitted input. A versioned replacement must be designed before the authenticated scan endpoint is completed.
 
 The gateway prepares the acceptance timestamp and event in its transaction, and exposes them only after commit. The stored accepted event satisfies `scan-observed.v1` and is forwarded unchanged. Source timestamps and identifier strings are not rewritten. Tests keep the request's common field definitions aligned with the event contract.
 
-Submit requests to the gateway on port 5200; the cloud on port 5100 expects accepted events instead. A retry uses the same event ID and every original field unchanged. A new physical observation gets a new ID. The HTTP receipt distinguishes `acceptedLocally` (201) and `alreadyAcceptedLocally` (200). `deliveryStatus` reports `pending`, `synchronized`, or `needsAttention` as recorded locally at the time of the receipt. Local acceptance alone does not claim synchronization. Tenant/plant/station/device fields must match trusted scope, not establish their own authority.
+Submit requests to the Development gateway using trusted `https://localhost:7200`; the cloud on port 5100 expects accepted events instead. A retry uses the same event ID and every original field unchanged. A new physical observation gets a new ID. The HTTP receipt distinguishes `acceptedLocally` (201) and `alreadyAcceptedLocally` (200). `deliveryStatus` reports `pending`, `synchronized`, or `needsAttention` as recorded locally at the time of the receipt. Local acceptance alone does not claim synchronization. Tenant/plant/station request fields must match trusted scope, not establish their own authority. The v1 `deviceId` remains unchanged evidence during checkpoint 5.4.2 and is not used to authenticate a physical scanner.
 
 ## Evolution rules
 

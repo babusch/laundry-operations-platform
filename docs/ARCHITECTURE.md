@@ -85,6 +85,8 @@ The PWA normally talks to the plant gateway over the LAN. IndexedDB is an emerge
 - Advanced handheld RFID may require a thin native Android shell or vendor SDK adapter.
 - Each vendor integration implements a project-owned adapter interface.
 - Simulators must reproduce normal reads, read storms, disconnects, malformed payloads, and retries.
+- The authenticated principal is the enrolled browser installation or adapter, not automatically the attached physical equipment. Keyboard-wedge input cannot reliably prove which scanner generated the keystrokes.
+- Keep optional equipment inventory separate from source authentication. Add it when actual hardware requires configuration, health, maintenance, calibration, movement history, or independently verified reader identity; do not introduce a universal equipment table in checkpoint 5.4.2.
 
 ## Data ownership
 

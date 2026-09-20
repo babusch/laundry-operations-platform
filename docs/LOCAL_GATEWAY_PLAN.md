@@ -109,7 +109,7 @@ Add migrations under gateway persistence when schema changes are introduced. Add
 ### 5. Secure network access
 
 - Authenticated gateway-to-cloud identity and tenant/plant authorization are implemented for loopback Development.
-- Secure station-to-gateway access and local HTTPS before connecting separate machines.
+- Trusted Development HTTPS and the local trusted-source registry/authentication seam are implemented. Browser enrollment and scan-route authorization remain the next station-to-gateway slices.
 - Do not weaken ADR 0004's development-only boundary to bypass authentication.
 - Follow with operator PWA integration and selected hardware, as separately scoped checkpoints.
 
