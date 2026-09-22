@@ -13,4 +13,4 @@ corepack pnpm --filter @laundry/api-client typecheck
 
 The browser client uses same-origin paths by default. The gateway-hosted PWA calls the local gateway directly; Vite forwards the same `/api` and `/health` paths during visual development. Callers may still supply an explicit base URL for non-browser tests and tools.
 
-The current client describes gateway readiness, `GET /api/source-session`, and `POST /api/scans`. The station currently uses the session response only to distinguish an enrolled browser from one that still needs setup; it does not retain or display the returned internal identifiers or use the antiforgery token until scan submission is reviewed.
+The current client describes gateway readiness, the Development enrollment creation/exchange flow, `GET /api/source-session`, and `POST /api/scans`. The station keeps the short-lived enrollment code only inside one setup request chain and does not display it or the returned internal identifiers. The secure browser credential is an `HttpOnly` cookie and therefore cannot be read by the PWA. The session antiforgery token remains unused until scan submission is reviewed.

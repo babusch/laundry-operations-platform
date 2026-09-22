@@ -129,7 +129,8 @@ h1 {
   background: var(--color-danger);
 }
 
-.retry-button {
+.retry-button,
+.setup-button {
   min-width: 10rem;
   min-height: 3.25rem;
   margin-top: 1rem;
@@ -142,17 +143,42 @@ h1 {
   cursor: pointer;
 }
 
-.retry-button:hover {
+.retry-button:hover,
+.setup-button:hover:not(:disabled) {
   background: #58c6ba;
 }
 
-.retry-button:active {
+.retry-button:active,
+.setup-button:active:not(:disabled) {
   transform: scale(0.98);
 }
 
-.retry-button:focus-visible {
+.retry-button:focus-visible,
+.setup-button:focus-visible {
   outline: 0.2rem solid var(--color-text);
   outline-offset: 0.2rem;
+}
+
+.setup-action {
+  margin-top: 1rem;
+}
+
+.setup-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.action-error {
+  margin: 0.75rem 0 0;
+  color: var(--color-danger);
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.setup-guidance {
+  margin: 1rem 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 .scope-note {
@@ -197,7 +223,8 @@ h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .retry-button:active {
+  .retry-button:active,
+  .setup-button:active:not(:disabled) {
     transform: none;
   }
 }

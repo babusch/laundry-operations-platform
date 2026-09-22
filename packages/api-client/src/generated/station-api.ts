@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/development/source-enrollments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a single-use enrollment for this local Development gateway */
+        post: operations["createDevelopmentSourceEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/source-enrollment/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange a single-use enrollment code for a secure browser credential */
+        post: operations["exchangeSourceEnrollment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scans": {
         parameters: {
             query?: never;
@@ -59,6 +93,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DevelopmentEnrollment: {
+            /** Format: uuid */
+            sourceId: string;
+            enrollmentCode: string;
+            /** Format: date-time */
+            expiresAtUtc: string;
+        };
+        EnrollmentExchange: {
+            enrollmentCode: string;
+        };
         SourceSession: {
             /** Format: uuid */
             sourceId: string;
@@ -201,6 +245,55 @@ export interface operations {
                 };
                 content?: never;
             };
+            503: components["responses"]["Problem"];
+        };
+    };
+    createDevelopmentSourceEnrollment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A pending source and short-lived enrollment code were created. */
+            201: {
+                headers: {
+                    /** @description Enrollment material must not be cached. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevelopmentEnrollment"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    exchangeSourceEnrollment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrollmentExchange"];
+            };
+        };
+        responses: {
+            /** @description The browser credential was created and set as a secure cookie. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

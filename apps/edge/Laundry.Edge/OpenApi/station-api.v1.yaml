@@ -45,6 +45,45 @@ paths:
           description: Source sessions require trusted HTTPS.
         "503":
           $ref: "#/components/responses/Problem"
+  /api/development/source-enrollments:
+    post:
+      operationId: createDevelopmentSourceEnrollment
+      summary: Create a single-use enrollment for this local Development gateway
+      responses:
+        "201":
+          description: A pending source and short-lived enrollment code were created.
+          headers:
+            Cache-Control:
+              description: Enrollment material must not be cached.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DevelopmentEnrollment"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/source-enrollment/exchange:
+    post:
+      operationId: exchangeSourceEnrollment
+      summary: Exchange a single-use enrollment code for a secure browser credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrollmentExchange"
+      responses:
+        "204":
+          description: The browser credential was created and set as a secure cookie.
+        "400":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
   /api/scans:
     post:
       operationId: submitScan
@@ -98,6 +137,30 @@ components:
       name: X-Laundry-CSRF
       description: Antiforgery token obtained from the authenticated source session.
   schemas:
+    DevelopmentEnrollment:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceId
+        - enrollmentCode
+        - expiresAtUtc
+      properties:
+        sourceId:
+          type: string
+          format: uuid
+        enrollmentCode:
+          type: string
+        expiresAtUtc:
+          type: string
+          format: date-time
+    EnrollmentExchange:
+      type: object
+      additionalProperties: false
+      required:
+        - enrollmentCode
+      properties:
+        enrollmentCode:
+          type: string
     SourceSession:
       type: object
       additionalProperties: false

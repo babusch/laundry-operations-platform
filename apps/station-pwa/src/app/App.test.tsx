@@ -18,7 +18,7 @@ describe("station application foundation", () => {
       screen.getByRole("heading", { name: "Laundry station" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Development simulator")).toBeInTheDocument();
-    expect(screen.getByText(/No enrollment is created/)).toBeInTheDocument();
+    expect(screen.getByText(/Development-only setup/)).toBeInTheDocument();
     expect(await screen.findByText("Gateway ready")).toBeInTheDocument();
     expect(screen.getByText(/Cloud status is not checked yet/)).toBeInTheDocument();
     expect(await screen.findByText("Station setup complete")).toBeInTheDocument();
@@ -30,12 +30,91 @@ describe("station application foundation", () => {
       <App
         checkGateway={vi.fn().mockResolvedValue(true)}
         checkEnrollment={vi.fn().mockResolvedValue("notEnrolled")}
+        allowDevelopmentEnrollment
       />,
     );
 
     expect(await screen.findByText("Station setup required")).toBeInTheDocument();
     expect(screen.getByText(/has not been enrolled/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Set up this browser" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/sourceId/i)).not.toBeInTheDocument();
+  });
+
+  it("enrolls this browser and verifies the new session", async () => {
+    let finishEnrollment: (result: boolean) => void = () => undefined;
+    const enrollBrowser = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishEnrollment = resolve;
+        }),
+    );
+    const checkEnrollment = vi
+      .fn<() => Promise<"notEnrolled" | "enrolled">>()
+      .mockResolvedValueOnce("notEnrolled")
+      .mockResolvedValueOnce("enrolled");
+    render(
+      <App
+        checkGateway={vi.fn().mockResolvedValue(true)}
+        checkEnrollment={checkEnrollment}
+        enrollBrowser={enrollBrowser}
+        allowDevelopmentEnrollment
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Set up this browser" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Setting up browser…" }),
+    ).toBeDisabled();
+
+    finishEnrollment(true);
+
+    expect(await screen.findByText("Station setup complete")).toBeInTheDocument();
+    expect(enrollBrowser).toHaveBeenCalledTimes(1);
+    expect(checkEnrollment).toHaveBeenCalledTimes(2);
+    expect(
+      screen.queryByRole("button", { name: /setup/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a retryable error when Development enrollment fails", async () => {
+    const enrollBrowser = vi.fn().mockResolvedValue(false);
+    render(
+      <App
+        checkGateway={vi.fn().mockResolvedValue(true)}
+        checkEnrollment={vi.fn().mockResolvedValue("notEnrolled")}
+        enrollBrowser={enrollBrowser}
+        allowDevelopmentEnrollment
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Set up this browser" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Station setup could not be completed",
+    );
+    expect(
+      screen.getByRole("button", { name: "Try setup again" }),
+    ).toBeEnabled();
+  });
+
+  it("does not offer browser enrollment outside the gateway HTTPS origin", async () => {
+    render(
+      <App
+        checkGateway={vi.fn().mockResolvedValue(true)}
+        checkEnrollment={vi.fn().mockResolvedValue("notEnrolled")}
+        allowDevelopmentEnrollment={false}
+      />,
+    );
+
+    expect(await screen.findByText("Station setup required")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /set up/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/gateway HTTPS address/)).toBeInTheDocument();
   });
 
   it("does not check enrollment until the gateway is ready and retries both", async () => {

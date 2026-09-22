@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { checkGatewayReadiness } from "../gateway/readiness";
+import { enrollDevelopmentBrowser } from "../gateway/development-enrollment";
 import {
   checkSourceSession,
   type SourceSessionStatus,
@@ -8,10 +9,13 @@ import {
 
 type ConnectionState = "checking" | "ready" | "unavailable";
 type EnrollmentState = "checking" | SourceSessionStatus;
+type EnrollmentActionState = "idle" | "working" | "failed";
 
 type AppProps = {
   checkGateway?: () => Promise<boolean>;
   checkEnrollment?: () => Promise<SourceSessionStatus>;
+  enrollBrowser?: () => Promise<boolean>;
+  allowDevelopmentEnrollment?: boolean;
 };
 
 const connectionContent: Record<
@@ -69,15 +73,20 @@ const enrollmentContent: Record<
 export function App({
   checkGateway = checkGatewayReadiness,
   checkEnrollment = checkSourceSession,
+  enrollBrowser = enrollDevelopmentBrowser,
+  allowDevelopmentEnrollment = window.location.protocol === "https:",
 }: AppProps) {
   const [connection, setConnection] = useState<ConnectionState>("checking");
   const [enrollment, setEnrollment] = useState<EnrollmentState>("checking");
+  const [enrollmentAction, setEnrollmentAction] =
+    useState<EnrollmentActionState>("idle");
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
     setConnection("checking");
     setEnrollment("checking");
+    setEnrollmentAction("idle");
 
     void (async () => {
       try {
@@ -109,6 +118,24 @@ export function App({
   const enrollmentStatus = enrollmentContent[enrollment];
   const retryAvailable =
     connection === "unavailable" || enrollment === "unavailable";
+
+  const handleEnrollment = async () => {
+    setEnrollmentAction("working");
+
+    try {
+      if (!(await enrollBrowser())) {
+        setEnrollmentAction("failed");
+        return;
+      }
+
+      setEnrollment("checking");
+      const status = await checkEnrollment();
+      setEnrollment(status);
+      setEnrollmentAction(status === "enrolled" ? "idle" : "failed");
+    } catch {
+      setEnrollmentAction("failed");
+    }
+  };
 
   return (
     <main className="app-shell">
@@ -148,9 +175,38 @@ export function App({
             Retry connection
           </button>
         ) : null}
+        {connection === "ready" &&
+        enrollment === "notEnrolled" &&
+        allowDevelopmentEnrollment ? (
+          <div className="setup-action">
+            <button
+              className="setup-button"
+              disabled={enrollmentAction === "working"}
+              onClick={() => void handleEnrollment()}
+            >
+              {enrollmentAction === "working"
+                ? "Setting up browser…"
+                : enrollmentAction === "failed"
+                  ? "Try setup again"
+                  : "Set up this browser"}
+            </button>
+            {enrollmentAction === "failed" ? (
+              <p className="action-error" role="alert">
+                Station setup could not be completed. Try again.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {connection === "ready" &&
+        enrollment === "notEnrolled" &&
+        !allowDevelopmentEnrollment ? (
+          <p className="setup-guidance">
+            Open this station from the gateway HTTPS address to set up this browser.
+          </p>
+        ) : null}
         <p className="scope-note">
-          No enrollment is created and no scans are sent yet. Operator sign-in
-          and scan controls will be added only after review.
+          This Development-only setup creates a local browser enrollment. No
+          operator is signed in and no scans are sent yet.
         </p>
       </section>
     </main>
