@@ -11,4 +11,6 @@ corepack pnpm generate:api-client
 corepack pnpm --filter @laundry/api-client typecheck
 ```
 
-The current client describes only `POST /api/scans`. Enrollment and session APIs will be added when their UI behavior is reviewed.
+The browser client uses same-origin paths by default. The gateway-hosted PWA calls the local gateway directly; Vite forwards the same `/api` and `/health` paths during visual development. Callers may still supply an explicit base URL for non-browser tests and tools.
+
+The current client describes gateway readiness and `POST /api/scans`. Enrollment and session APIs will be added when their UI behavior is reviewed.

@@ -2,6 +2,7 @@ using Laundry.Edge.Health;
 using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
 using Laundry.Edge.Security;
+using Laundry.Edge.Station;
 using Laundry.Edge.Synchronization;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -38,6 +39,8 @@ builder.Services.AddHealthChecks()
     .AddCheck<PlantDatabaseHealthCheck>("plant-postgres", tags: ["ready"], timeout: TimeSpan.FromSeconds(5));
 
 var app = builder.Build();
+
+app.UseStationApplication();
 
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanAcceptance:Enabled"))
 {

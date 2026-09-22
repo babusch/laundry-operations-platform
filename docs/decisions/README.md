@@ -22,6 +22,7 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0015 — Minimal request and trusted event for scan v2](0015-minimal-trusted-scan-v2-contract.md)
 - [0016 — Retire v1 for new station submissions](0016-retire-v1-station-submission.md)
 - [0017 — Activate trusted scan v2](0017-activate-trusted-scan-v2.md)
+- [0018 — Gateway hosts the station PWA](0018-gateway-hosts-station-pwa.md)
 
 ## Template
 

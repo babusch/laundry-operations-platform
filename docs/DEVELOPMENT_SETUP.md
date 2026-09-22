@@ -372,15 +372,24 @@ Readiness does not yet prove write capacity, correct migrations, or scan accepta
 
 ### Run the station Development simulator
 
-Keep the plant database and gateway running, then open another terminal at the repository root:
+For fast visual development, keep the plant database and gateway running, then open another terminal at the repository root:
 
 ```powershell
 corepack pnpm dev:station
 ```
 
-Open `http://127.0.0.1:5173`. The station shell checks gateway readiness through a development-only `/gateway` proxy. It shows one of three explicit states: checking, ready, or unavailable. An unavailable state includes a manual retry. "Gateway ready" means only that the local gateway can reach plant PostgreSQL; it does not claim cloud connectivity, current migrations, write capacity, source enrollment, or scan acceptance.
+Open `http://127.0.0.1:5173`. Vite forwards the same `/api` and `/health` paths used by the deployed application to `https://localhost:7200`. The station shell shows checking, ready, or unavailable and provides a manual retry after failure. This HTTP mode is for rapid visual development, not secure-cookie enrollment verification.
 
-This slice sends no scans and stores no emergency queue. The proxy exists only in the Vite development server; a deployed plant installation will require its own reviewed same-origin or gateway-routing configuration.
+For the same-origin HTTPS integration mode, stop Vite if it is running, then build the station application before starting or restarting the gateway:
+
+```powershell
+corepack pnpm build:station
+dotnet run --project apps/edge/Laundry.Edge
+```
+
+Open `https://localhost:7200`. The build command writes generated files to the gateway's ignored `wwwroot` directory. The gateway serves the PWA, `/api`, and `/health` from one HTTPS origin; unknown API-like routes remain 404 responses rather than returning the PWA shell. Rebuild after frontend changes. "Gateway ready" means only that the local gateway can reach plant PostgreSQL; it does not claim cloud connectivity, current migrations, write capacity, source enrollment, or scan acceptance.
+
+This slice sends no scans and stores no emergency queue. Source enrollment will use the HTTPS integration mode in a later reviewed step.
 
 The Development connection string `ConnectionStrings:Plant` uses database `laundry_plant`, user `laundry_edge`, local-only password `laundry_edge_local_dev_only`, and port 15433. Other environments must provide `ConnectionStrings__Plant`; do not expose this unauthenticated foundation over the network. The launch profile binds to localhost. If you override `PLANT_POSTGRES_*` in `.env`, also supply a matching `ConnectionStrings__Plant` in the gateway terminal: ASP.NET Core does not automatically read `.env`.
 
@@ -585,9 +594,9 @@ The first install creates or updates `pnpm-lock.yaml`. Commit that lockfile so e
 
 ## Station application foundation
 
-The first station-PWA slice is scaffolded under `apps/station-pwa`. It currently shows only a clearly labelled Development simulator shell and deliberately sends no scans. Source enrollment, scan controls, service-worker installation, and browser offline storage are not implemented yet.
+The station PWA under `apps/station-pwa` is a clearly labelled Development simulator shell with local gateway-readiness feedback. It deliberately sends no scans. Source enrollment, scan controls, service-worker installation, and browser offline storage are not implemented yet.
 
-The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document currently describes only `POST /api/scans` and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
+The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document describes gateway readiness and `POST /api/scans`, and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
 
 ```powershell
 corepack pnpm generate:api-client
@@ -600,10 +609,10 @@ corepack pnpm test:station
 corepack pnpm build:station
 ```
 
-To view the empty shell during development:
+To view the shell with Vite during visual development:
 
 ```powershell
 corepack pnpm dev:station
 ```
 
-Open the local URL printed by Vite and stop it with `Ctrl+C`. This development server is not yet connected to the HTTPS gateway.
+Open the local URL printed by Vite and stop it with `Ctrl+C`. For the gateway-hosted HTTPS workflow, use the earlier [station Development simulator](#run-the-station-development-simulator) instructions.

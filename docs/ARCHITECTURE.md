@@ -56,7 +56,7 @@ Modules own their domain rules and persistence mappings. Cross-module changes us
 
 ## Plant gateway
 
-See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host, local health checks, transactional acceptance/outbox, and Development-only forwarding worker are implemented. The gateway acquires and caches short-lived Keycloak tokens and the cloud validates their permission and tenant/plant scope (ADRs 0012–0013). The refined [station-to-gateway identity and access plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved, and its first implementation slice makes trusted `https://localhost:7200` the primary Development station transport. Temporary HTTP compatibility remains loopback-only until the protected scan route replaces it. Remote production access, stable plant naming, certificate provisioning, and the installation credential lifecycle remain planned.
+See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host, local health checks, transactional acceptance/outbox, and Development-only forwarding worker are implemented. The gateway acquires and caches short-lived Keycloak tokens and the cloud validates their permission and tenant/plant scope (ADRs 0012–0013). The refined [station-to-gateway identity and access plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved, and its first implementation slice makes trusted `https://localhost:7200` the primary Development station transport. The station PWA is built independently and bundled into the plant gateway release, which serves it from the same HTTPS origin as `/api` and `/health` ([ADR 0018](decisions/0018-gateway-hosts-station-pwa.md)). Temporary HTTP compatibility remains loopback-only until the protected scan route replaces it. Remote production access, stable plant naming, certificate provisioning, and the installation credential lifecycle remain planned.
 
 Run a gateway on a managed industrial PC or plant server. It:
 
@@ -74,7 +74,7 @@ Development-only synchronization diagnostics and audited replay are available th
 
 ## Operator application
 
-The operator PWA is a separate deployable frontend sharing design components and generated contracts with the management application. It is optimized for large touch targets, scanner input, minimal typing, kiosk use, clear sound/visual feedback, and multilingual operation.
+The operator PWA is a separately built frontend bundled with the compatible plant gateway release. The gateway serves the compiled application over the same local HTTPS origin used by its API. The PWA shares design components and generated contracts with the management application and is optimized for large touch targets, scanner input, minimal typing, kiosk use, clear sound/visual feedback, and multilingual operation.
 
 The PWA normally talks to the plant gateway over the LAN. IndexedDB is an emergency queue when even the gateway is temporarily unreachable; it is not the durable plant system of record.
 

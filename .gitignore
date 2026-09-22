@@ -30,6 +30,7 @@ node_modules/
 dist/
 out/
 *.tsbuildinfo
+apps/edge/Laundry.Edge/wwwroot/
 
 # Test and tool output
 artifacts/

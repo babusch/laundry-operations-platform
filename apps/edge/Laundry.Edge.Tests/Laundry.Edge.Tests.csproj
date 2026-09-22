@@ -21,5 +21,6 @@
     <None Include="../../../packages/contracts/examples/submit-scan.v2.*.json" Link="Contracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../packages/contracts/events/scan-observed.v2.schema.json" Link="Contracts/scan-observed.v2.schema.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Laundry.Edge/Properties/launchSettings.json" Link="Configuration/launchSettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="StationAppFixture/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

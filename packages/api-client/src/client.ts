@@ -8,7 +8,7 @@ export type GatewayClientOptions = {
 
 export function createGatewayClient(options: GatewayClientOptions = {}) {
   return createClient<paths>({
-    baseUrl: options.baseUrl ?? "https://localhost:7200",
+    baseUrl: options.baseUrl ?? "",
     credentials: "include",
   });
 }
