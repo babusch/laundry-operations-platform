@@ -35,6 +35,14 @@ In descending order:
 - Use plain, direct labels based on plant vocabulary. Avoid vague navigation names and unexplained technical synchronization terms.
 - Do not use blur, translucency, low contrast, parallax, or decorative motion where dust, glare, older displays, or operator urgency could reduce readability.
 
+### Production scan workspace direction
+
+- Design the primary capture flow for high-throughput RFID use, while keeping barcode and manual paths clearly available where the workflow permits them.
+- Keep the active order and laundry customer unmistakable throughout capture.
+- Show session and active customer/order totals plus an article-type breakdown without obscuring immediate scan feedback.
+- Treat manual additions, deviations, and problem reporting as explicit labelled actions. Require the appropriate reason/context and show that the action is attributed to the signed-in operator; never style a manual addition as if a scanner observed it.
+- Progressive disclosure may move detailed composition and exception history behind secondary views, but the operator must see the context and totals needed to prevent work against the wrong order.
+
 ## Shop-floor dark theme
 
 The station PWA uses a dark, laundry-specific visual system. Deep blue-green surfaces evoke water and industrial wash equipment without becoming decorative; softly muted light text provides high legibility without excessive glare, and restrained operational colors remain reserved for meaning. This is the default station theme, not an automatic reflection of the operating-system theme.

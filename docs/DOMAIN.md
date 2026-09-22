@@ -22,6 +22,8 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 | Order | Requested or expected laundry service |
 | Delivery | Collection or distribution movement to a customer location |
 | Scan event | Observation originating from a trusted source at a station; physical equipment attribution is optional and must not claim more assurance than the integration provides |
+| Manual entry | Operator-attributed business action for an item or quantity that cannot be captured by a scanner; not a synthetic scan event |
+| Deviation | Operator-recorded departure from the expected order, quantity, item, quality, or process, with reason and workflow context |
 | Exception | State requiring operator or supervisor intervention |
 
 ## Identity principles
@@ -33,6 +35,8 @@ Approved by the user on 2026-09-08: keep station identity stable while making op
 A fallback workstation can perform an allowed operation while retaining its actual trusted-source and station identity; it must not impersonate an unavailable workstation. Source authorization restricts which identity may be claimed, not necessarily the number of operations available there.
 
 A raw scan observation alone does not mean receipt or dispatch. Business interpretation requires explicit operation context; lookup must not create a receiving transition. When workflow processing is introduced, preserve the operation context applicable at capture so later station configuration changes or delayed delivery do not reinterpret historical scans. The existing raw-observation v1 contract remains unchanged; the representation of workflow context is deferred to that slice.
+
+Manual additions and deviations are not scanner observations. Model them as explicit commands and resulting business events linked to the active operator, order/customer, workflow, station, time, and stated reason as applicable. Preserve their audit history and any later correction; never invent a tag read to make manually entered work fit the scan pipeline.
 
 Approved source-identity direction (2026-09-20): operator and source identities remain independent. An operator can move between stations and a station can serve multiple operators across shifts. Ordinary browser installations use a separately enrolled secure station credential by default; managed installations may substitute a workstation certificate. Remote adapters prefer unique client certificates, while adapters inside or co-located with the gateway use the applicable gateway/operating-system trust boundary. All mechanisms resolve to the same server-owned tenant/plant/station trusted source; request fields do not establish their own authority.
 

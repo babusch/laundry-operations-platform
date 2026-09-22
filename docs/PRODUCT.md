@@ -40,6 +40,14 @@ Every material transition must be traceable to time, plant, trusted source/stati
 
 Before a scan can count as a receiving, sorting, packing, dispatch, inventory, or other operational action, both the source/station and the active operator must be authenticated and authorized for that workflow. A device ID is not required: stations may use several scanners, and equipment attribution stays optional unless the integration can establish it reliably.
 
+### Production station workspace direction
+
+The pilot laundry is predominantly RFID-based, so the production station experience should optimize for rapid multi-item RFID capture while continuing to support barcode and explicit manual work where needed. Barcode-first simulator slices are infrastructure proofs, not a decision to make the finished product barcode-centric.
+
+The production scan workspace is expected to show at least the active order and laundry customer, totals for the current work session and active customer/order, and a useful breakdown by article type. Exact measures and grouping remain subject to workflow observation with the pilot plant.
+
+Operators also need explicit ways to record items or quantities that cannot be scanned and to document deviations or other operational problems. These are operator-attributed, auditable business actions with reasons and workflow context. They must not be represented as fabricated barcode or RFID observations.
+
 ## Initial product boundary
 
 Build first:

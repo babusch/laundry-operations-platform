@@ -391,7 +391,11 @@ Open `https://localhost:7200`. The build command writes generated files to the g
 
 When the second status says `Station setup required`, select **Set up this browser**. This Development-only action asks the loopback gateway to create a short-lived, single-use enrollment and immediately exchanges it for a secure `HttpOnly` browser cookie. The PWA does not display or persist the source ID, enrollment code, or cookie value. After exchange, it rechecks the session and should report `Station setup complete`. This identifies the browser source only; no operator is signed in.
 
-The setup action is intentionally absent from the Vite HTTP page. Use the gateway-hosted `https://localhost:7200` page so the secure cookie is established on the correct origin. This slice sends no scans and stores no emergency queue.
+The setup action is intentionally absent from the Vite HTTP page. Use the gateway-hosted `https://localhost:7200` page so the secure cookie is established on the correct origin.
+
+After setup, the Development page displays a synthetic barcode field. **Send simulated barcode** uses the real protected `POST /api/scans` route and reports success only after the observation is durably saved in plant storage. This is raw infrastructure evidence only: no operator is signed in and it does not record receiving, sorting, packing, dispatch, or another business operation.
+
+If the page says **Save result unknown**, the connection may have failed after the gateway committed. Use **Retry same scan**; the page retains the exact immutable request and the gateway's idempotency rules prevent a duplicate. A definite rejection unlocks the field for correction. The page still has no browser emergency queue or service worker.
 
 The Development connection string `ConnectionStrings:Plant` uses database `laundry_plant`, user `laundry_edge`, local-only password `laundry_edge_local_dev_only`, and port 15433. Other environments must provide `ConnectionStrings__Plant`; do not expose this unauthenticated foundation over the network. The launch profile binds to localhost. If you override `PLANT_POSTGRES_*` in `.env`, also supply a matching `ConnectionStrings__Plant` in the gateway terminal: ASP.NET Core does not automatically read `.env`.
 
@@ -596,7 +600,7 @@ The first install creates or updates `pnpm-lock.yaml`. Commit that lockfile so e
 
 ## Station application foundation
 
-The station PWA under `apps/station-pwa` is a clearly labelled Development simulator shell with local gateway-readiness feedback, enrolled-browser session detection, and a gateway-HTTPS-only Development enrollment action. It deliberately sends no scans. Production enrollment administration/recovery, operator sign-in, scan controls, service-worker installation, and browser offline storage are not implemented yet.
+The station PWA under `apps/station-pwa` is a clearly labelled Development simulator with local gateway-readiness feedback, enrolled-browser session detection, a gateway-HTTPS-only Development enrollment action, and one synthetic-barcode raw-observation control. It preserves the exact request after an uncertain result so a retry remains idempotent. Production enrollment administration/recovery, operator sign-in, RFID capture controls, workflow actions, service-worker installation, and browser offline storage are not implemented yet.
 
 The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document describes gateway readiness, Development enrollment creation/exchange, `GET /api/source-session`, and `POST /api/scans`, and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
 

@@ -1,7 +1,24 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SubmitScanV2 } from "@laundry/api-client";
 
 import { App } from "./App";
+
+const scanRequest: SubmitScanV2 = {
+  schemaVersion: 2,
+  eventId: "11111111-1111-4111-8111-111111111111",
+  eventType: "scan.observed",
+  correlationId: "11111111-1111-4111-8111-111111111111",
+  observedAtUtc: "2026-09-22T10:00:00.000Z",
+  identifier: { technology: "barcode", value: "SIMULATED-BARCODE-TEST" },
+};
+
+const acceptedReceipt = {
+  eventId: scanRequest.eventId,
+  status: "acceptedLocally" as const,
+  gatewayAcceptedAtUtc: "2026-09-22T10:00:00.100Z",
+  deliveryStatus: "pending" as const,
+};
 
 afterEach(cleanup);
 
@@ -18,11 +35,15 @@ describe("station application foundation", () => {
       screen.getByRole("heading", { name: "Laundry station" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Development simulator")).toBeInTheDocument();
-    expect(screen.getByText(/Development-only setup/)).toBeInTheDocument();
+    expect(screen.getByText(/Development-only application/)).toBeInTheDocument();
     expect(await screen.findByText("Gateway ready")).toBeInTheDocument();
     expect(screen.getByText(/Cloud status is not checked yet/)).toBeInTheDocument();
     expect(await screen.findByText("Station setup complete")).toBeInTheDocument();
     expect(screen.getByText(/Operator sign-in is not implemented yet/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Simulated barcode scan" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/raw observation only/i)).toBeInTheDocument();
   });
 
   it("shows when the browser still needs station setup", async () => {
@@ -155,5 +176,77 @@ describe("station application foundation", () => {
 
     expect(await screen.findByText("Station setup complete")).toBeInTheDocument();
     expect(checkEnrollment).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows local durability without claiming the laundry operation completed", async () => {
+    const submitScan = vi.fn().mockResolvedValue({
+      kind: "accepted",
+      receipt: acceptedReceipt,
+    });
+    render(
+      <App
+        checkGateway={vi.fn().mockResolvedValue(true)}
+        checkEnrollment={vi.fn().mockResolvedValue("enrolled")}
+        createScanRequest={() => scanRequest}
+        submitScan={submitScan}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Send simulated barcode" }),
+    );
+
+    expect(await screen.findByText("Saved locally")).toBeInTheDocument();
+    expect(screen.getByText(/waiting for cloud synchronization/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not record receiving/i)).toBeInTheDocument();
+    expect(submitScan).toHaveBeenCalledWith(scanRequest);
+  });
+
+  it("retries an uncertain result with the exact same immutable request", async () => {
+    const submitScan = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: "uncertain" })
+      .mockResolvedValueOnce({ kind: "accepted", receipt: acceptedReceipt });
+    render(
+      <App
+        checkGateway={vi.fn().mockResolvedValue(true)}
+        checkEnrollment={vi.fn().mockResolvedValue("enrolled")}
+        createScanRequest={() => scanRequest}
+        submitScan={submitScan}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Send simulated barcode" }),
+    );
+
+    expect(await screen.findByText("Save result unknown")).toBeInTheDocument();
+    expect(screen.getByLabelText("Synthetic barcode identifier")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Retry same scan" }));
+
+    expect(await screen.findByText("Saved locally")).toBeInTheDocument();
+    expect(submitScan).toHaveBeenCalledTimes(2);
+    expect(submitScan.mock.calls[0]?.[0]).toBe(submitScan.mock.calls[1]?.[0]);
+  });
+
+  it("allows correction after a definite rejection", async () => {
+    render(
+      <App
+        checkGateway={vi.fn().mockResolvedValue(true)}
+        checkEnrollment={vi.fn().mockResolvedValue("enrolled")}
+        createScanRequest={() => scanRequest}
+        submitScan={vi.fn().mockResolvedValue({ kind: "rejected" })}
+      />,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Send simulated barcode" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Not saved");
+    expect(screen.getByLabelText("Synthetic barcode identifier")).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Send simulated barcode" }),
+    ).toBeEnabled();
   });
 });

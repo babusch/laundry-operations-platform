@@ -130,7 +130,8 @@ h1 {
 }
 
 .retry-button,
-.setup-button {
+.setup-button,
+.scan-button {
   min-width: 10rem;
   min-height: 3.25rem;
   margin-top: 1rem;
@@ -144,17 +145,21 @@ h1 {
 }
 
 .retry-button:hover,
-.setup-button:hover:not(:disabled) {
+.setup-button:hover:not(:disabled),
+.scan-button:hover:not(:disabled) {
   background: #58c6ba;
 }
 
 .retry-button:active,
-.setup-button:active:not(:disabled) {
+.setup-button:active:not(:disabled),
+.scan-button:active:not(:disabled) {
   transform: scale(0.98);
 }
 
 .retry-button:focus-visible,
-.setup-button:focus-visible {
+.setup-button:focus-visible,
+.scan-button:focus-visible,
+input:focus-visible {
   outline: 0.2rem solid var(--color-text);
   outline-offset: 0.2rem;
 }
@@ -166,6 +171,91 @@ h1 {
 .setup-button:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.scan-simulator {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 0.125rem solid var(--color-border);
+}
+
+.simulator-label {
+  margin: 0 0 0.5rem;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+h2 {
+  margin: 0;
+  font-size: clamp(1.5rem, 4vw, 2rem);
+  line-height: 1.15;
+}
+
+.scan-boundary {
+  margin: 0.75rem 0 1.5rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.scan-simulator form {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.scan-simulator label {
+  font-weight: 700;
+}
+
+.scan-simulator input {
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.75rem 0.875rem;
+  border: 0.125rem solid var(--color-border);
+  border-radius: 0.75rem;
+  color: var(--color-text);
+  background: var(--color-canvas);
+}
+
+.scan-simulator input:disabled {
+  opacity: 0.7;
+}
+
+.scan-button {
+  justify-self: start;
+  margin-top: 0.375rem;
+}
+
+.scan-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.scan-result {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding: 0.875rem 1rem;
+  border: 0.125rem solid var(--color-success);
+  border-radius: 0.75rem;
+  background: #152a25;
+  line-height: 1.45;
+}
+
+.scan-result span {
+  color: var(--color-text-muted);
+}
+
+.scan-result--warning {
+  border-color: var(--color-warning);
+  background: #27251b;
+}
+
+.scan-result--danger {
+  border-color: var(--color-danger);
+  background: #2b1f23;
 }
 
 .action-error {
@@ -213,6 +303,17 @@ h1 {
   .status-detail {
     color: #ffffff;
   }
+
+  .scan-result,
+  .scan-simulator input {
+    border-color: #ffffff;
+    background: #000000;
+  }
+
+  .scan-boundary,
+  .scan-result span {
+    color: #ffffff;
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -224,7 +325,8 @@ h1 {
 
 @media (prefers-reduced-motion: reduce) {
   .retry-button:active,
-  .setup-button:active:not(:disabled) {
+  .setup-button:active:not(:disabled),
+  .scan-button:active:not(:disabled) {
     transform: none;
   }
 }
