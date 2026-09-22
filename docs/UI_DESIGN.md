@@ -35,6 +35,30 @@ In descending order:
 - Use plain, direct labels based on plant vocabulary. Avoid vague navigation names and unexplained technical synchronization terms.
 - Do not use blur, translucency, low contrast, parallax, or decorative motion where dust, glare, older displays, or operator urgency could reduce readability.
 
+## Shop-floor dark theme
+
+The station PWA uses a dark, laundry-specific visual system. Deep blue-green surfaces evoke water and industrial wash equipment without becoming decorative; softly muted light text provides high legibility without excessive glare, and restrained operational colors remain reserved for meaning. This is the default station theme, not an automatic reflection of the operating-system theme.
+
+| Token | Name | Value | Use |
+|---|---|---|---|
+| Canvas | Midnight wash | `#071A21` | Application background and dark text on bright controls |
+| Panel | Deep basin | `#0C242C` | Primary application surfaces |
+| Raised surface | Raised surface | `#102F38` | Status cards and elevated content |
+| Border | Steel border | `#244A53` | Structural separation |
+| Primary text | Clean linen | `#DCE9E7` | Headings and essential text |
+| Secondary text | Mist text | `#9FB8B6` | Supporting text that remains clearly readable |
+| Accent | Aqua rinse | `#42B8AD` | Primary actions, focus, and development context |
+| Success | Fresh success | `#48B97B` | Confirmed success states |
+| Warning | Caution amber | `#D4A84F` | Warnings and setup-required states |
+| Error | Stop coral | `#DD6C65` | Failures and unavailable states |
+
+- Pair every operational color with explicit text and a symbol or shape. Color alone never communicates status.
+- Keep large surfaces within the blue-green neutral range. Accent and status colors are signals, not decoration.
+- Keep normal-mode text and signals slightly muted to reduce glare; reserve pure white and maximum contrast for the increased-contrast preference.
+- Prefer solid surfaces over translucency on shop-floor screens to preserve contrast and performance.
+- Interaction variants may be derived from these tokens, but must preserve clear contrast and recognizable status meaning.
+- Increased-contrast mode remains dark and strengthens borders and text rather than switching the station to a bright theme.
+
 ## Motion and feedback
 
 - Respond visually on pointer-down and continuously during direct manipulation.
@@ -58,3 +82,4 @@ Administrative interfaces may use denser layouts than operator stations, but hie
 - Motion is interruptible where interactive and has a reduced-motion equivalent.
 - Feedback timing matches the actual durability and business result.
 - The implementation has been reviewed against the `apple-design` skill rather than merely referencing it.
+- Station PWA changes use the documented dark-theme tokens and preserve their semantic roles.

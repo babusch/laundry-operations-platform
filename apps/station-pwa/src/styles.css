@@ -1,9 +1,21 @@
 :root {
-  color: #15221b;
-  background: #edf1ed;
+  color: #dce9e7;
+  background: #071a21;
+  color-scheme: dark;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+
+  --color-canvas: #071a21;
+  --color-panel: #0c242c;
+  --color-raised: #102f38;
+  --color-border: #244a53;
+  --color-text: #dce9e7;
+  --color-text-muted: #9fb8b6;
+  --color-accent: #42b8ad;
+  --color-success: #48b97b;
+  --color-warning: #d4a84f;
+  --color-danger: #dd6c65;
 }
 
 * {
@@ -31,15 +43,15 @@ input {
 .foundation {
   width: min(100%, 44rem);
   padding: clamp(1.5rem, 5vw, 3.5rem);
-  border: 0.125rem solid #bac6bd;
+  border: 0.125rem solid var(--color-border);
   border-radius: 1.25rem;
-  background: #ffffff;
-  box-shadow: 0 1rem 2.5rem rgb(26 43 34 / 10%);
+  background: var(--color-panel);
+  box-shadow: 0 1rem 2.5rem rgb(0 0 0 / 32%);
 }
 
 .environment-label {
   margin: 0 0 0.75rem;
-  color: #795300;
+  color: var(--color-accent);
   font-size: 0.875rem;
   font-weight: 750;
   letter-spacing: 0.06em;
@@ -60,9 +72,9 @@ h1 {
   gap: 0.75rem;
   margin: 2rem 0 0;
   padding: 1rem;
-  border: 0.125rem solid #b8c2bb;
+  border: 0.125rem solid var(--color-border);
   border-radius: 0.875rem;
-  background: #f4f7f4;
+  background: var(--color-raised);
 }
 
 .status-card + .status-card {
@@ -78,7 +90,7 @@ h1 {
 
 .status-detail {
   margin: 0.4rem 0 0;
-  color: #435149;
+  color: var(--color-text-muted);
   line-height: 1.5;
 }
 
@@ -89,32 +101,32 @@ h1 {
   flex: 0 0 auto;
   place-items: center;
   border-radius: 50%;
-  color: #ffffff;
-  background: #17643b;
+  color: var(--color-canvas);
+  background: var(--color-success);
 }
 
 .status-card--checking .status-mark {
-  color: #15221b;
-  background: #dfe5e0;
+  color: var(--color-canvas);
+  background: var(--color-text-muted);
 }
 
 .status-card--warning {
-  border-color: #c89b48;
-  background: #fff9e9;
+  border-color: var(--color-warning);
+  background: #27251b;
 }
 
 .status-card--warning .status-mark {
-  color: #241a00;
-  background: #e4b64e;
+  color: var(--color-canvas);
+  background: var(--color-warning);
 }
 
 .status-card--unavailable {
-  border-color: #c7897c;
-  background: #fff4f1;
+  border-color: var(--color-danger);
+  background: #2b1f23;
 }
 
 .status-card--unavailable .status-mark {
-  background: #a33420;
+  background: var(--color-danger);
 }
 
 .retry-button {
@@ -122,16 +134,16 @@ h1 {
   min-height: 3.25rem;
   margin-top: 1rem;
   padding: 0.75rem 1.25rem;
-  border: 0.125rem solid #173d29;
+  border: 0.125rem solid var(--color-accent);
   border-radius: 0.75rem;
-  color: #ffffff;
-  background: #1d5435;
+  color: var(--color-canvas);
+  background: var(--color-accent);
   font-weight: 700;
   cursor: pointer;
 }
 
 .retry-button:hover {
-  background: #173f2a;
+  background: #58c6ba;
 }
 
 .retry-button:active {
@@ -139,46 +151,47 @@ h1 {
 }
 
 .retry-button:focus-visible {
-  outline: 0.2rem solid #0b68d1;
+  outline: 0.2rem solid var(--color-text);
   outline-offset: 0.2rem;
 }
 
 .scope-note {
   max-width: 36rem;
   margin: 1rem 0 0;
-  color: #435149;
+  color: var(--color-text-muted);
   font-size: 1rem;
   line-height: 1.6;
 }
 
 @media (prefers-contrast: more) {
   :root {
-    color: #000000;
-    background: #ffffff;
+    color: #ffffff;
+    background: #000000;
   }
 
   .foundation {
-    border-color: #000000;
+    border-color: #ffffff;
+    background: #000000;
     box-shadow: none;
   }
 
   .scope-note {
-    color: #000000;
+    color: #ffffff;
   }
 
   .status-card {
-    border-color: #000000;
-    background: #ffffff;
+    border-color: #ffffff;
+    background: #000000;
   }
 
   .status-detail {
-    color: #000000;
+    color: #ffffff;
   }
 }
 
 @media (prefers-reduced-transparency: reduce) {
   .foundation {
-    background: #ffffff;
+    background: var(--color-panel);
     box-shadow: none;
   }
 }
