@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/source-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check the browser's enrolled source session */
+        get: operations["getSourceSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/scans": {
         parameters: {
             query?: never;
@@ -42,6 +59,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SourceSession: {
+            /** Format: uuid */
+            sourceId: string;
+            /** Format: uuid */
+            stationId: string;
+            permissions: string[];
+            antiforgeryToken: string;
+            antiforgeryHeaderName: string;
+        };
         SubmitScanV2: {
             schemaVersion: components["schemas"]["schemaVersion"];
             eventId: components["schemas"]["uuid"];
@@ -139,6 +165,43 @@ export interface operations {
                     "text/plain": string;
                 };
             };
+        };
+    };
+    getSourceSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The browser has an active enrolled source session. */
+            200: {
+                headers: {
+                    /** @description Session details must not be cached. */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSession"];
+                };
+            };
+            /** @description The browser has no active enrolled source session. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Source sessions require trusted HTTPS. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            503: components["responses"]["Problem"];
         };
     };
     submitScan: {

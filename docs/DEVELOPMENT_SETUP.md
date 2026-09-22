@@ -387,9 +387,9 @@ corepack pnpm build:station
 dotnet run --project apps/edge/Laundry.Edge
 ```
 
-Open `https://localhost:7200`. The build command writes generated files to the gateway's ignored `wwwroot` directory. The gateway serves the PWA, `/api`, and `/health` from one HTTPS origin; unknown API-like routes remain 404 responses rather than returning the PWA shell. Rebuild after frontend changes. "Gateway ready" means only that the local gateway can reach plant PostgreSQL; it does not claim cloud connectivity, current migrations, write capacity, source enrollment, or scan acceptance.
+Open `https://localhost:7200`. The build command writes generated files to the gateway's ignored `wwwroot` directory. The gateway serves the PWA, `/api`, and `/health` from one HTTPS origin; unknown API-like routes remain 404 responses rather than returning the PWA shell. Rebuild after frontend changes. "Gateway ready" means only that the local gateway can reach plant PostgreSQL; it does not claim cloud connectivity, current migrations, write capacity, source enrollment, or scan acceptance. After readiness succeeds, the station separately checks `GET /api/source-session`. It reports whether this browser is already enrolled without displaying internal station/source IDs and without claiming that an operator is signed in.
 
-This slice sends no scans and stores no emergency queue. Source enrollment will use the HTTPS integration mode in a later reviewed step.
+This slice sends no scans, creates no enrollment, and stores no emergency queue. A Development-only enrollment action will use the HTTPS integration mode in a later reviewed step.
 
 The Development connection string `ConnectionStrings:Plant` uses database `laundry_plant`, user `laundry_edge`, local-only password `laundry_edge_local_dev_only`, and port 15433. Other environments must provide `ConnectionStrings__Plant`; do not expose this unauthenticated foundation over the network. The launch profile binds to localhost. If you override `PLANT_POSTGRES_*` in `.env`, also supply a matching `ConnectionStrings__Plant` in the gateway terminal: ASP.NET Core does not automatically read `.env`.
 
@@ -594,9 +594,9 @@ The first install creates or updates `pnpm-lock.yaml`. Commit that lockfile so e
 
 ## Station application foundation
 
-The station PWA under `apps/station-pwa` is a clearly labelled Development simulator shell with local gateway-readiness feedback. It deliberately sends no scans. Source enrollment, scan controls, service-worker installation, and browser offline storage are not implemented yet.
+The station PWA under `apps/station-pwa` is a clearly labelled Development simulator shell with local gateway-readiness feedback and enrolled-browser session detection. It deliberately sends no scans. Enrollment creation, operator sign-in, scan controls, service-worker installation, and browser offline storage are not implemented yet.
 
-The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document describes gateway readiness and `POST /api/scans`, and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
+The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document describes gateway readiness, `GET /api/source-session`, and `POST /api/scans`, and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
 
 ```powershell
 corepack pnpm generate:api-client

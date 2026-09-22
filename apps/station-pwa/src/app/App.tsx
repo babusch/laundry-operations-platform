@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
 
 import { checkGatewayReadiness } from "../gateway/readiness";
+import {
+  checkSourceSession,
+  type SourceSessionStatus,
+} from "../gateway/source-session";
 
 type ConnectionState = "checking" | "ready" | "unavailable";
+type EnrollmentState = "checking" | SourceSessionStatus;
 
 type AppProps = {
   checkGateway?: () => Promise<boolean>;
+  checkEnrollment?: () => Promise<SourceSessionStatus>;
 };
 
 const connectionContent: Record<
@@ -29,28 +35,80 @@ const connectionContent: Record<
   },
 };
 
-export function App({ checkGateway = checkGatewayReadiness }: AppProps) {
+const enrollmentContent: Record<
+  EnrollmentState,
+  { icon: string; label: string; detail: string; tone: string }
+> = {
+  checking: {
+    icon: "…",
+    label: "Checking station setup…",
+    detail: "Confirming whether this browser is enrolled with the local gateway.",
+    tone: "checking",
+  },
+  enrolled: {
+    icon: "✓",
+    label: "Station setup complete",
+    detail:
+      "This browser is enrolled with the local gateway. Operator sign-in is not implemented yet.",
+    tone: "ready",
+  },
+  notEnrolled: {
+    icon: "!",
+    label: "Station setup required",
+    detail: "This browser has not been enrolled with the local gateway.",
+    tone: "warning",
+  },
+  unavailable: {
+    icon: "!",
+    label: "Station setup unavailable",
+    detail: "The gateway answered, but station enrollment could not be checked.",
+    tone: "unavailable",
+  },
+};
+
+export function App({
+  checkGateway = checkGatewayReadiness,
+  checkEnrollment = checkSourceSession,
+}: AppProps) {
   const [connection, setConnection] = useState<ConnectionState>("checking");
+  const [enrollment, setEnrollment] = useState<EnrollmentState>("checking");
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
     setConnection("checking");
+    setEnrollment("checking");
 
-    void checkGateway()
-      .then((ready) => {
-        if (active) setConnection(ready ? "ready" : "unavailable");
-      })
-      .catch(() => {
+    void (async () => {
+      try {
+        const ready = await checkGateway();
+        if (!active) return;
+        if (!ready) {
+          setConnection("unavailable");
+          return;
+        }
+
+        setConnection("ready");
+        try {
+          const status = await checkEnrollment();
+          if (active) setEnrollment(status);
+        } catch {
+          if (active) setEnrollment("unavailable");
+        }
+      } catch {
         if (active) setConnection("unavailable");
-      });
+      }
+    })();
 
     return () => {
       active = false;
     };
-  }, [attempt, checkGateway]);
+  }, [attempt, checkEnrollment, checkGateway]);
 
   const content = connectionContent[connection];
+  const enrollmentStatus = enrollmentContent[enrollment];
+  const retryAvailable =
+    connection === "unavailable" || enrollment === "unavailable";
 
   return (
     <main className="app-shell">
@@ -58,7 +116,7 @@ export function App({ checkGateway = checkGatewayReadiness }: AppProps) {
         <p className="environment-label">Development simulator</p>
         <h1 id="station-title">Laundry station</h1>
         <div
-          className={`connection-status connection-status--${connection}`}
+          className={`status-card status-card--${connection}`}
           role="status"
           aria-live="polite"
         >
@@ -70,14 +128,29 @@ export function App({ checkGateway = checkGatewayReadiness }: AppProps) {
             <p className="status-detail">{content.detail}</p>
           </div>
         </div>
-        {connection === "unavailable" ? (
+        {connection === "ready" ? (
+          <div
+            className={`status-card status-card--${enrollmentStatus.tone}`}
+            role="status"
+            aria-live="polite"
+          >
+            <span className="status-mark" aria-hidden="true">
+              {enrollmentStatus.icon}
+            </span>
+            <div>
+              <p className="status-line">{enrollmentStatus.label}</p>
+              <p className="status-detail">{enrollmentStatus.detail}</p>
+            </div>
+          </div>
+        ) : null}
+        {retryAvailable ? (
           <button className="retry-button" onClick={() => setAttempt((value) => value + 1)}>
             Retry connection
           </button>
         ) : null}
         <p className="scope-note">
-          No scans are sent yet. Station enrollment and scan controls will be
-          added only after we review them.
+          No enrollment is created and no scans are sent yet. Operator sign-in
+          and scan controls will be added only after review.
         </p>
       </section>
     </main>

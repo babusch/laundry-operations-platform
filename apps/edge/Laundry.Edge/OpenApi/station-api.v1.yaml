@@ -21,6 +21,30 @@ paths:
             text/plain:
               schema:
                 type: string
+  /api/source-session:
+    get:
+      operationId: getSourceSession
+      summary: Check the browser's enrolled source session
+      security:
+        - sourceCookie: []
+      responses:
+        "200":
+          description: The browser has an active enrolled source session.
+          headers:
+            Cache-Control:
+              description: Session details must not be cached.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SourceSession"
+        "401":
+          description: The browser has no active enrolled source session.
+        "403":
+          description: Source sessions require trusted HTTPS.
+        "503":
+          $ref: "#/components/responses/Problem"
   /api/scans:
     post:
       operationId: submitScan
@@ -74,6 +98,30 @@ components:
       name: X-Laundry-CSRF
       description: Antiforgery token obtained from the authenticated source session.
   schemas:
+    SourceSession:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceId
+        - stationId
+        - permissions
+        - antiforgeryToken
+        - antiforgeryHeaderName
+      properties:
+        sourceId:
+          type: string
+          format: uuid
+        stationId:
+          type: string
+          format: uuid
+        permissions:
+          type: array
+          items:
+            type: string
+        antiforgeryToken:
+          type: string
+        antiforgeryHeaderName:
+          type: string
     SubmitScanV2:
       type: object
       additionalProperties: false

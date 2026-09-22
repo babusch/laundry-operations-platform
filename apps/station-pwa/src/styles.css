@@ -54,7 +54,7 @@ h1 {
   line-height: 1;
 }
 
-.connection-status {
+.status-card {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
@@ -63,6 +63,10 @@ h1 {
   border: 0.125rem solid #b8c2bb;
   border-radius: 0.875rem;
   background: #f4f7f4;
+}
+
+.status-card + .status-card {
+  margin-top: 0.75rem;
 }
 
 .status-line {
@@ -89,17 +93,27 @@ h1 {
   background: #17643b;
 }
 
-.connection-status--checking .status-mark {
+.status-card--checking .status-mark {
   color: #15221b;
   background: #dfe5e0;
 }
 
-.connection-status--unavailable {
+.status-card--warning {
+  border-color: #c89b48;
+  background: #fff9e9;
+}
+
+.status-card--warning .status-mark {
+  color: #241a00;
+  background: #e4b64e;
+}
+
+.status-card--unavailable {
   border-color: #c7897c;
   background: #fff4f1;
 }
 
-.connection-status--unavailable .status-mark {
+.status-card--unavailable .status-mark {
   background: #a33420;
 }
 
@@ -152,7 +166,7 @@ h1 {
     color: #000000;
   }
 
-  .connection-status {
+  .status-card {
     border-color: #000000;
     background: #ffffff;
   }
