@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGatewayClient } from "@laundry/api-client";
 
 import {
-  createSimulatedBarcodeScan,
+  createSimulatedScan,
+  createSyntheticIdentifier,
   submitScanToGateway,
 } from "./scan-submission";
 
@@ -11,21 +12,29 @@ afterEach(() => {
 });
 
 describe("scan submission", () => {
-  it("creates the minimal v2 barcode observation without authority claims", () => {
-    const request = createSimulatedBarcodeScan("  SIMULATED-123  ");
+  it.each(["rfid", "barcode"] as const)(
+    "creates a minimal v2 %s observation without authority claims",
+    (technology) => {
+      const request = createSimulatedScan(technology, "  SIMULATED-123  ");
 
-    expect(request).toMatchObject({
-      schemaVersion: 2,
-      eventType: "scan.observed",
-      identifier: { technology: "barcode", value: "SIMULATED-123" },
-    });
-    expect(request.eventId).toBe(request.correlationId);
-    expect(request).not.toHaveProperty("tenantId");
-    expect(request).not.toHaveProperty("plantId");
-    expect(request).not.toHaveProperty("stationId");
-    expect(request).not.toHaveProperty("sourceId");
-    expect(request).not.toHaveProperty("deviceId");
-    expect(request).not.toHaveProperty("operatorId");
+      expect(request).toMatchObject({
+        schemaVersion: 2,
+        eventType: "scan.observed",
+        identifier: { technology, value: "SIMULATED-123" },
+      });
+      expect(request.eventId).toBe(request.correlationId);
+      expect(request).not.toHaveProperty("tenantId");
+      expect(request).not.toHaveProperty("plantId");
+      expect(request).not.toHaveProperty("stationId");
+      expect(request).not.toHaveProperty("sourceId");
+      expect(request).not.toHaveProperty("deviceId");
+      expect(request).not.toHaveProperty("operatorId");
+    },
+  );
+
+  it("labels synthetic identifiers with their simulated technology", () => {
+    expect(createSyntheticIdentifier("rfid")).toMatch(/^SIMULATED-RFID-/);
+    expect(createSyntheticIdentifier("barcode")).toMatch(/^SIMULATED-BARCODE-/);
   });
 
   it("gets a fresh antiforgery token before sending the scan", async () => {
@@ -57,7 +66,7 @@ describe("scan submission", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const outcome = await submitScanToGateway(
-      createSimulatedBarcodeScan("SIMULATED-123"),
+      createSimulatedScan("rfid", "SIMULATED-123"),
       createGatewayClient({ baseUrl: "https://gateway.test" }),
     );
 
@@ -74,7 +83,7 @@ describe("scan submission", () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockRejectedValue(new TypeError("offline")));
 
     const outcome = await submitScanToGateway(
-      createSimulatedBarcodeScan("SIMULATED-123"),
+      createSimulatedScan("rfid", "SIMULATED-123"),
       createGatewayClient({ baseUrl: "https://gateway.test" }),
     );
 

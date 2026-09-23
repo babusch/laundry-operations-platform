@@ -10,7 +10,12 @@ export type ScanSubmissionOutcome =
   | { kind: "rejected" }
   | { kind: "uncertain" };
 
-export function createSimulatedBarcodeScan(identifier: string): SubmitScanV2 {
+export type ScanTechnology = SubmitScanV2["identifier"]["technology"];
+
+export function createSimulatedScan(
+  technology: ScanTechnology,
+  identifier: string,
+): SubmitScanV2 {
   const eventId = crypto.randomUUID();
 
   return {
@@ -20,14 +25,14 @@ export function createSimulatedBarcodeScan(identifier: string): SubmitScanV2 {
     correlationId: eventId,
     observedAtUtc: new Date().toISOString(),
     identifier: {
-      technology: "barcode",
+      technology,
       value: identifier.trim(),
     },
   };
 }
 
-export function createSyntheticBarcodeIdentifier(): string {
-  return `SIMULATED-BARCODE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+export function createSyntheticIdentifier(technology: ScanTechnology): string {
+  return `SIMULATED-${technology.toUpperCase()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
 export async function submitScanToGateway(

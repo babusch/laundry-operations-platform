@@ -59,6 +59,23 @@ public sealed class SyncDiagnosticsTests(AcceptanceFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task ListingCanReturnNewestObservationsFirstWithoutPayloads()
+    {
+        var older = await Seed("synchronized", age: TimeSpan.FromMinutes(2));
+        var newest = await Seed("pending", age: TimeSpan.FromMinutes(1));
+        using var app = App();
+        using var client = app.CreateClient();
+
+        var page = JsonNode.Parse(await client.GetStringAsync("/api/sync/events?order=latest&limit=1"))!;
+
+        Assert.Equal(newest.EventId.ToString(), page["items"]![0]!["eventId"]!.GetValue<string>());
+        Assert.Equal(1, page["nextOffset"]!.GetValue<int>());
+        var body = page.ToJsonString();
+        Assert.DoesNotContain(older.SubmissionJson, body);
+        Assert.DoesNotContain("SIMULATED", body);
+    }
+
+    [Fact]
     public async Task ReplayIsAuditedAtomicIdempotentAndDoesNotChangeEvidence()
     {
         var scan = await Seed("needsAttention");

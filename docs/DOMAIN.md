@@ -19,7 +19,7 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 | Container | Bag, trolley, cage, cart, or other handling unit |
 | Production batch | Group processed together through one or more production steps |
 | Process run | Actual execution of a wash, dry, finish, or other machine/program step |
-| Order | Requested or expected laundry service |
+| Order | Shared customer turnaround through the plant, from incoming receipt through outgoing verification; see [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md) |
 | Delivery | Collection or distribution movement to a customer location |
 | Scan event | Observation originating from a trusted source at a station; physical equipment attribution is optional and must not claim more assurance than the integration provides |
 | Manual entry | Operator-attributed business action for an item or quantity that cannot be captured by a scanner; not a synthetic scan event |
@@ -79,3 +79,5 @@ Event names describe facts that happened. Commands such as `StartBatch` or `Conf
 State transitions must be explicit and validated. A scan should represent an operational intent in context—not merely change an arbitrary status field. Invalid transitions return actionable feedback while retaining the attempted event for diagnostics.
 
 Detailed state machines belong beside their owning module once workflows are validated with real users. Record material changes to shared terminology here.
+
+The confirmed pilot order behavior, provisional assumptions, invariants, and unresolved workflow questions are maintained in [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md).

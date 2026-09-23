@@ -26,6 +26,8 @@ Station behavior is configurable: dedicated operation, flexible operation select
 
 ## Core operational journey
 
+The pilot's order-level incoming/outgoing behavior is documented in [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md). That document distinguishes confirmed plant behavior from assumptions that still require validation.
+
 1. Collection or customer handoff
 2. Receiving and identification
 3. Sorting and classification

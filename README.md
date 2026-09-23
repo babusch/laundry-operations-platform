@@ -20,6 +20,7 @@ Start here:
 - [Architecture](docs/ARCHITECTURE.md)
 - [Offline and synchronization design](docs/OFFLINE_AND_SYNC.md)
 - [Domain model](docs/DOMAIN.md)
+- [Laundry order workflow](docs/LAUNDRY_ORDER_WORKFLOW.md)
 - [UI design](docs/UI_DESIGN.md)
 - [Delivery roadmap](docs/ROADMAP.md)
 - [Repository structure](docs/REPOSITORY_STRUCTURE.md)

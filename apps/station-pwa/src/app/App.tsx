@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { LocalReceipt, SubmitScanV2 } from "@laundry/api-client";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 
 import { checkGatewayReadiness } from "../gateway/readiness";
 import { enrollDevelopmentBrowser } from "../gateway/development-enrollment";
@@ -10,11 +9,16 @@ import {
   type SourceSessionStatus,
 } from "../gateway/source-session";
 import {
-  createSimulatedBarcodeScan,
-  createSyntheticBarcodeIdentifier,
+  createSimulatedScan,
+  createSyntheticIdentifier,
   submitScanToGateway,
+  type ScanTechnology,
   type ScanSubmissionOutcome,
 } from "../gateway/scan-submission";
+import {
+  loadSyncAudit,
+  type SyncAuditSnapshot,
+} from "../gateway/sync-audit";
 import {
   normalizeLanguage,
   persistLanguage,
@@ -26,9 +30,10 @@ type ConnectionState = "checking" | "ready" | "unavailable";
 type EnrollmentState = "checking" | SourceSessionStatus;
 type EnrollmentActionState = "idle" | "working" | "failed";
 type ScanActionState = "idle" | "sending";
+type AuditState = "idle" | "loading" | "ready" | "unavailable";
 type ScanFeedback = {
-  label: string;
-  detail: string;
+  labelKey: string;
+  detailKey: string;
   tone: "success" | "warning" | "danger";
 };
 
@@ -38,37 +43,41 @@ type AppProps = {
   enrollBrowser?: () => Promise<boolean>;
   allowDevelopmentEnrollment?: boolean;
   submitScan?: (request: SubmitScanV2) => Promise<ScanSubmissionOutcome>;
-  createScanRequest?: (identifier: string) => SubmitScanV2;
+  createScanRequest?: (
+    technology: ScanTechnology,
+    identifier: string,
+  ) => SubmitScanV2;
+  loadAudit?: () => Promise<SyncAuditSnapshot | null>;
 };
 
-function feedbackForReceipt(receipt: LocalReceipt, t: TFunction): ScanFeedback {
+function feedbackForReceipt(receipt: LocalReceipt): ScanFeedback {
   if (receipt.status === "alreadyAcceptedLocally") {
     return {
-      label: t("feedback.alreadySaved.label"),
-      detail: t("feedback.alreadySaved.detail"),
+      labelKey: "feedback.alreadySaved.label",
+      detailKey: "feedback.alreadySaved.detail",
       tone: "success",
     };
   }
 
   if (receipt.deliveryStatus === "synchronized") {
     return {
-      label: t("feedback.synchronized.label"),
-      detail: t("feedback.synchronized.detail"),
+      labelKey: "feedback.synchronized.label",
+      detailKey: "feedback.synchronized.detail",
       tone: "success",
     };
   }
 
   if (receipt.deliveryStatus === "needsAttention") {
     return {
-      label: t("feedback.needsAttention.label"),
-      detail: t("feedback.needsAttention.detail"),
+      labelKey: "feedback.needsAttention.label",
+      detailKey: "feedback.needsAttention.detail",
       tone: "warning",
     };
   }
 
   return {
-    label: t("feedback.saved.label"),
-    detail: t("feedback.saved.detail"),
+    labelKey: "feedback.saved.label",
+    detailKey: "feedback.saved.detail",
     tone: "success",
   };
 }
@@ -130,7 +139,8 @@ export function App({
   enrollBrowser = enrollDevelopmentBrowser,
   allowDevelopmentEnrollment = window.location.protocol === "https:",
   submitScan = submitScanToGateway,
-  createScanRequest = createSimulatedBarcodeScan,
+  createScanRequest = createSimulatedScan,
+  loadAudit = loadSyncAudit,
 }: AppProps) {
   const { t, i18n } = useTranslation();
   const [connection, setConnection] = useState<ConnectionState>("checking");
@@ -138,10 +148,17 @@ export function App({
   const [enrollmentAction, setEnrollmentAction] =
     useState<EnrollmentActionState>("idle");
   const [attempt, setAttempt] = useState(0);
-  const [identifier, setIdentifier] = useState(createSyntheticBarcodeIdentifier);
+  const [technology, setTechnology] = useState<ScanTechnology>("rfid");
+  const [identifier, setIdentifier] = useState(() =>
+    createSyntheticIdentifier("rfid"),
+  );
   const [scanAction, setScanAction] = useState<ScanActionState>("idle");
   const [pendingScan, setPendingScan] = useState<SubmitScanV2 | null>(null);
   const [scanFeedback, setScanFeedback] = useState<ScanFeedback | null>(null);
+  const [auditState, setAuditState] = useState<AuditState>("idle");
+  const [auditSnapshot, setAuditSnapshot] =
+    useState<SyncAuditSnapshot | null>(null);
+  const [auditAttempt, setAuditAttempt] = useState(0);
   const activeLanguage = normalizeLanguage(i18n.resolvedLanguage) ?? "en";
 
   useEffect(() => {
@@ -185,6 +202,27 @@ export function App({
     };
   }, [attempt, checkEnrollment, checkGateway]);
 
+  useEffect(() => {
+    if (connection !== "ready" || enrollment !== "enrolled") {
+      setAuditState("idle");
+      setAuditSnapshot(null);
+      return;
+    }
+
+    let active = true;
+    setAuditState("loading");
+
+    void loadAudit().then((snapshot) => {
+      if (!active) return;
+      setAuditSnapshot(snapshot);
+      setAuditState(snapshot ? "ready" : "unavailable");
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [auditAttempt, connection, enrollment, loadAudit]);
+
   const content = connectionContent[connection];
   const enrollmentStatus = enrollmentContent[enrollment];
   const retryAvailable =
@@ -212,6 +250,12 @@ export function App({
     void i18n.changeLanguage(language);
   };
 
+  const handleTechnologyChange = (nextTechnology: ScanTechnology) => {
+    setTechnology(nextTechnology);
+    setIdentifier(createSyntheticIdentifier(nextTechnology));
+    setScanFeedback(null);
+  };
+
   const handleScan = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (scanAction === "sending") return;
@@ -219,14 +263,15 @@ export function App({
     const normalizedIdentifier = identifier.trim();
     if (!pendingScan && normalizedIdentifier.length === 0) {
       setScanFeedback({
-        label: t("feedback.missingIdentifier.label"),
-        detail: t("feedback.missingIdentifier.detail"),
+        labelKey: "feedback.missingIdentifier.label",
+        detailKey: "feedback.missingIdentifier.detail",
         tone: "danger",
       });
       return;
     }
 
-    const request = pendingScan ?? createScanRequest(normalizedIdentifier);
+    const request =
+      pendingScan ?? createScanRequest(technology, normalizedIdentifier);
     setPendingScan(request);
     setScanFeedback(null);
     setScanAction("sending");
@@ -236,8 +281,8 @@ export function App({
 
     if (outcome.kind === "uncertain") {
       setScanFeedback({
-        label: t("feedback.unknown.label"),
-        detail: t("feedback.unknown.detail"),
+        labelKey: "feedback.unknown.label",
+        detailKey: "feedback.unknown.detail",
         tone: "warning",
       });
       return;
@@ -246,15 +291,21 @@ export function App({
     setPendingScan(null);
     if (outcome.kind === "rejected") {
       setScanFeedback({
-        label: t("feedback.rejected.label"),
-        detail: t("feedback.rejected.detail"),
+        labelKey: "feedback.rejected.label",
+        detailKey: "feedback.rejected.detail",
         tone: "danger",
       });
       return;
     }
 
-    setScanFeedback(feedbackForReceipt(outcome.receipt, t));
+    setScanFeedback(feedbackForReceipt(outcome.receipt));
+    setAuditAttempt((value) => value + 1);
   };
+
+  const auditTimeFormatter = new Intl.DateTimeFormat(
+    activeLanguage === "sv" ? "sv-SE" : "en",
+    { dateStyle: "medium", timeStyle: "short" },
+  );
 
   return (
     <main className="app-shell">
@@ -346,15 +397,43 @@ export function App({
         ) : null}
         {connection === "ready" && enrollment === "enrolled" ? (
           <section className="scan-simulator" aria-labelledby="scan-simulator-title">
-            <p className="simulator-label">{t("scan.context")}</p>
-            <h2 id="scan-simulator-title">{t("scan.title")}</h2>
+            <p className="simulator-label">
+              {t(`scan.technology.${technology}.context`)}
+            </p>
+            <h2 id="scan-simulator-title">
+              {t(`scan.technology.${technology}.title`)}
+            </h2>
             <p className="scan-boundary">{t("scan.boundary")}</p>
             <form onSubmit={(event) => void handleScan(event)}>
-              <label htmlFor="synthetic-barcode">
-                {t("scan.identifierLabel")}
+              <fieldset
+                className="technology-picker"
+                disabled={scanAction === "sending" || pendingScan !== null}
+              >
+                <legend>{t("scan.technologyLabel")}</legend>
+                <div className="technology-options">
+                  {(["rfid", "barcode"] as const).map((option) => (
+                    <label
+                      key={option}
+                      className={technology === option ? "is-selected" : undefined}
+                    >
+                      <input
+                        type="radio"
+                        name="scan-technology"
+                        value={option}
+                        checked={technology === option}
+                        onChange={() => handleTechnologyChange(option)}
+                      />
+                      <span>{t(`scan.technology.${option}.name`)}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <label htmlFor="synthetic-identifier">
+                {t(`scan.technology.${technology}.identifierLabel`)}
               </label>
               <input
-                id="synthetic-barcode"
+                id="synthetic-identifier"
+                type="text"
                 value={identifier}
                 maxLength={512}
                 disabled={scanAction === "sending" || pendingScan !== null}
@@ -367,7 +446,7 @@ export function App({
                   ? t("scan.saving")
                   : pendingScan
                     ? t("scan.retrySame")
-                    : t("scan.send")}
+                    : t(`scan.technology.${technology}.send`)}
               </button>
             </form>
             {scanFeedback ? (
@@ -376,9 +455,76 @@ export function App({
                 role={scanFeedback.tone === "danger" ? "alert" : "status"}
                 aria-live="polite"
               >
-                <strong>{scanFeedback.label}</strong>
-                <span>{scanFeedback.detail}</span>
+                <strong>{t(scanFeedback.labelKey)}</strong>
+                <span>{t(scanFeedback.detailKey)}</span>
               </div>
+            ) : null}
+          </section>
+        ) : null}
+        {connection === "ready" && enrollment === "enrolled" ? (
+          <section className="sync-audit" aria-labelledby="sync-audit-title">
+            <div className="sync-audit__header">
+              <div>
+                <p className="simulator-label">{t("audit.context")}</p>
+                <h2 id="sync-audit-title">{t("audit.title")}</h2>
+              </div>
+              <button
+                className="audit-refresh-button"
+                disabled={auditState === "loading"}
+                onClick={() => setAuditAttempt((value) => value + 1)}
+              >
+                {auditState === "loading"
+                  ? t("audit.refreshing")
+                  : t("audit.refresh")}
+              </button>
+            </div>
+            <p className="scan-boundary">{t("audit.description")}</p>
+            {auditState === "loading" ? (
+              <p className="audit-message" role="status">
+                {t("audit.loading")}
+              </p>
+            ) : null}
+            {auditState === "unavailable" ? (
+              <p className="audit-message audit-message--warning" role="status">
+                {t("audit.unavailable")}
+              </p>
+            ) : null}
+            {auditState === "ready" && auditSnapshot ? (
+              <>
+                <dl className="audit-summary">
+                  <div>
+                    <dt>{t("audit.status.pending")}</dt>
+                    <dd>{auditSnapshot.summary.pending}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("audit.status.synchronized")}</dt>
+                    <dd>{auditSnapshot.summary.synchronized}</dd>
+                  </div>
+                  <div>
+                    <dt>{t("audit.status.needsAttention")}</dt>
+                    <dd>{auditSnapshot.summary.needsAttention}</dd>
+                  </div>
+                </dl>
+                <h3>{t("audit.recentTitle")}</h3>
+                {auditSnapshot.recent.length === 0 ? (
+                  <p className="audit-message">{t("audit.empty")}</p>
+                ) : (
+                  <ol className="audit-events">
+                    {auditSnapshot.recent.map((item) => (
+                      <li key={item.eventId}>
+                        <span
+                          className={`audit-status audit-status--${item.status}`}
+                        >
+                          {t(`audit.status.${item.status}`)}
+                        </span>
+                        <time dateTime={item.acceptedAtUtc}>
+                          {auditTimeFormatter.format(new Date(item.acceptedAtUtc))}
+                        </time>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </>
             ) : null}
           </section>
         ) : null}

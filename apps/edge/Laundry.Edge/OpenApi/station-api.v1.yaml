@@ -124,6 +124,63 @@ paths:
           $ref: "#/components/responses/Problem"
         "503":
           $ref: "#/components/responses/Problem"
+  /api/sync/summary:
+    get:
+      operationId: getSynchronizationSummary
+      summary: Read the local gateway-to-cloud delivery summary
+      responses:
+        "200":
+          description: Counts and timing metadata for this development plant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueueSummary"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
+  /api/sync/events:
+    get:
+      operationId: listSynchronizationEvents
+      summary: List delivery metadata without scan payloads or identifiers
+      parameters:
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/DeliveryStatus"
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [oldest, latest]
+            default: oldest
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000000
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: A bounded page of delivery metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueuePage"
+        "400":
+          $ref: "#/components/responses/Problem"
+        "403":
+          $ref: "#/components/responses/Problem"
+        "503":
+          $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
     sourceCookie:
@@ -229,11 +286,104 @@ components:
           type: string
           format: date-time
         deliveryStatus:
+          $ref: "#/components/schemas/DeliveryStatus"
+    DeliveryStatus:
+      type: string
+      enum:
+        - pending
+        - synchronized
+        - needsAttention
+    QueueItem:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - status
+        - acceptedAtUtc
+        - attempts
+      properties:
+        eventId:
           type: string
-          enum:
-            - pending
-            - synchronized
-            - needsAttention
+          format: uuid
+        status:
+          $ref: "#/components/schemas/DeliveryStatus"
+        acceptedAtUtc:
+          type: string
+          format: date-time
+        attempts:
+          type: integer
+          minimum: 0
+        nextAttemptAtUtc:
+          type: [string, "null"]
+          format: date-time
+        leaseUntilUtc:
+          type: [string, "null"]
+          format: date-time
+        cloudReceivedAtUtc:
+          type: [string, "null"]
+          format: date-time
+        lastError:
+          type: [string, "null"]
+    QueuePage:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - nextOffset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueueItem"
+        nextOffset:
+          type: [integer, "null"]
+    WorkerSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - lastIterationAtUtc
+        - lastIterationError
+      properties:
+        lastIterationAtUtc:
+          type: [string, "null"]
+          format: date-time
+        lastIterationError:
+          type: [string, "null"]
+    QueueSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - asOfUtc
+        - pending
+        - synchronized
+        - needsAttention
+        - oldestPendingAgeSeconds
+        - lastCloudReceiptAtUtc
+        - forwardingEnabled
+        - worker
+      properties:
+        asOfUtc:
+          type: string
+          format: date-time
+        pending:
+          type: integer
+          minimum: 0
+        synchronized:
+          type: integer
+          minimum: 0
+        needsAttention:
+          type: integer
+          minimum: 0
+        oldestPendingAgeSeconds:
+          type: [number, "null"]
+          minimum: 0
+        lastCloudReceiptAtUtc:
+          type: [string, "null"]
+          format: date-time
+        forwardingEnabled:
+          type: boolean
+        worker:
+          $ref: "#/components/schemas/WorkerSnapshot"
     ProblemDetails:
       type: object
       additionalProperties: true

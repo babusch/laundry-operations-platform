@@ -393,9 +393,9 @@ When the second status says `Station setup required`, select **Set up this brows
 
 The setup action is intentionally absent from the Vite HTTP page. Use the gateway-hosted `https://localhost:7200` page so the secure cookie is established on the correct origin.
 
-After setup, the Development page displays a synthetic barcode field. **Send simulated barcode** uses the real protected `POST /api/scans` route and reports success only after the observation is durably saved in plant storage. This is raw infrastructure evidence only: no operator is signed in and it does not record receiving, sorting, packing, dispatch, or another business operation.
+After setup, the Development page offers RFID and barcode simulation, with RFID selected by default. Sending the synthetic identifier uses the real protected `POST /api/scans` route and reports success only after the observation is durably saved in plant storage. This is raw infrastructure evidence only: no operator is signed in and it does not record receiving, sorting, packing, dispatch, or another business operation.
 
-If the page says **Save result unknown**, the connection may have failed after the gateway committed. Use **Retry same scan**; the page retains the exact immutable request and the gateway's idempotency rules prevent a duplicate. A definite rejection unlocks the field for correction. The page still has no browser emergency queue or service worker.
+If the page says **Save result unknown**, the connection may have failed after the gateway committed. Use **Retry same scan**; the page locks the technology and identifier and retains the exact immutable request so the gateway's idempotency rules prevent a duplicate. A definite rejection unlocks the controls for correction. The page still has no browser emergency queue or service worker.
 
 The language selector supports English and Swedish without a network request. A saved selection takes precedence over the browser language and English is the fallback. Changing it updates the page title and document language and stores only the language code in local browser storage.
 
@@ -559,7 +559,7 @@ Invoke-RestMethod 'https://localhost:7200/api/sync/events?status=needsAttention&
 
 The summary reports pending/synchronized/needs-attention counts, oldest pending age in seconds (null when none), last confirmed cloud receipt time, forwarding enablement, and the worker's most recent iteration. A successful iteration does not mean the cloud is reachable: examine delivery states and error codes too. Worker heartbeat information resets at restart. A database failure gives HTTP 503 rather than pretending the queue is empty. Health readiness still checks plant connectivity only.
 
-The list includes event IDs, acceptance times, attempts, retry/lease timing, cloud receipt time, and safe error codes—not tag identifiers or scan payloads. Omit `status` for all states; `limit` is 1–100 (default 50), `offset` defaults to zero. Follow `nextOffset` until null. Lists can shift as deliveries change, so refresh a record before acting. Audit lists use pages of 50 with the same `nextOffset` convention.
+The list includes event IDs, acceptance times, attempts, retry/lease timing, cloud receipt time, and safe error codes—not tag identifiers or scan payloads. Omit `status` for all states; `order` can be `oldest` (the default) or `latest`; `limit` is 1–100 (default 50), and `offset` defaults to zero. Follow `nextOffset` until null. Lists can shift as deliveries change, so refresh a record before acting. Audit lists use pages of 50 with the same `nextOffset` convention.
 
 For a specific event, replace the placeholder with an ID from the list:
 
@@ -587,7 +587,7 @@ HTTP 202 / `replayRequested` means the requeue and audit record committed togeth
 
 HTTP 409 means stale state, a live lease, a record not in `needsAttention`, or changed request-ID reuse. Refresh and investigate rather than blindly retrying. A missing or out-of-scope event returns 404. On 503, retain the same replay request because its commit outcome might be uncertain.
 
-These routes are enabled only in Development with scan acceptance and `SyncDiagnostics:Enabled`, and require loopback access. The audit actor is explicitly `local-development-unattributed`, not an authenticated user. Do not expose these commands on the plant network before checkpoint 5 adds identity and authorization. No browser dashboard or bulk replay is included yet.
+These routes are enabled only in Development with scan acceptance and `SyncDiagnostics:Enabled`, and require loopback access. The audit actor is explicitly `local-development-unattributed`, not an authenticated user. Do not expose these commands on the plant network before person identity and authorization are implemented. The station simulator includes a read-only metadata summary and recent-observation list; replay remains a command-line-only Development action and no bulk replay is included.
 
 ## Contract validation
 
@@ -602,9 +602,9 @@ The first install creates or updates `pnpm-lock.yaml`. Commit that lockfile so e
 
 ## Station application foundation
 
-The station PWA under `apps/station-pwa` is a clearly labelled Development simulator with local gateway-readiness feedback, enrolled-browser session detection, a gateway-HTTPS-only Development enrollment action, and one synthetic-barcode raw-observation control. It preserves the exact request after an uncertain result so a retry remains idempotent. Production enrollment administration/recovery, operator sign-in, RFID capture controls, workflow actions, service-worker installation, and browser offline storage are not implemented yet.
+The station PWA under `apps/station-pwa` is a clearly labelled Development simulator with local gateway-readiness feedback, enrolled-browser session detection, a gateway-HTTPS-only Development enrollment action, and synthetic RFID/barcode raw-observation controls. RFID is the default, but this remains manual simulation rather than real reader integration. It preserves the exact request after an uncertain result so a retry remains idempotent. Its read-only synchronization audit shows aggregate delivery counts and five newest observation states without showing event IDs or tag/barcode values. Production enrollment administration/recovery, operator sign-in, real RFID capture, workflow actions, service-worker installation, and browser offline storage are not implemented yet.
 
-The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document describes gateway readiness, Development enrollment creation/exchange, `GET /api/source-session`, and `POST /api/scans`, and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
+The typed gateway client under `packages/api-client` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. That OpenAPI document describes gateway readiness, Development enrollment creation/exchange, source session, scan submission, and read-only synchronization-summary/list routes, and references the canonical `submit-scan.v2` JSON Schema. Regenerate it whenever the HTTP description changes:
 
 ```powershell
 corepack pnpm generate:api-client

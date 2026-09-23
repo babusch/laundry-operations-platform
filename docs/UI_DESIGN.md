@@ -53,6 +53,13 @@ In descending order:
 - Treat manual additions, deviations, and problem reporting as explicit labelled actions. Require the appropriate reason/context and show that the action is attributed to the signed-in operator; never style a manual addition as if a scanner observed it.
 - Progressive disclosure may move detailed composition and exception history behind secondary views, but the operator must see the context and totals needed to prevent work against the wrong order.
 
+### Synchronization audit presentation
+
+- Keep station-facing audit information read-only unless an authenticated, authorized administrative workflow is explicitly designed.
+- Show plain-language delivery states and times; do not expose tag values, barcode values, internal event IDs, retry errors, leases, or other support metadata unless the user's task requires them.
+- Separate locally durable acceptance from cloud confirmation. A temporarily unavailable audit snapshot must not imply that locally stored observations were lost.
+- Use an explicit manual refresh for this Development view. Do not introduce attention-grabbing polling or motion for a passive diagnostic summary.
+
 ## Shop-floor dark theme
 
 The station PWA uses a dark, laundry-specific visual system. Deep blue-green surfaces evoke water and industrial wash equipment without becoming decorative; softly muted light text provides high legibility without excessive glare, and restrained operational colors remain reserved for meaning. This is the default station theme, not an automatic reflection of the operating-system theme.

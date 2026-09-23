@@ -89,6 +89,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sync/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the local gateway-to-cloud delivery summary */
+        get: operations["getSynchronizationSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sync/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List delivery metadata without scan payloads or identifiers */
+        get: operations["listSynchronizationEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -127,8 +161,45 @@ export interface components {
             status: "acceptedLocally" | "alreadyAcceptedLocally";
             /** Format: date-time */
             gatewayAcceptedAtUtc: string;
-            /** @enum {string} */
-            deliveryStatus: "pending" | "synchronized" | "needsAttention";
+            deliveryStatus: components["schemas"]["DeliveryStatus"];
+        };
+        /** @enum {string} */
+        DeliveryStatus: "pending" | "synchronized" | "needsAttention";
+        QueueItem: {
+            /** Format: uuid */
+            eventId: string;
+            status: components["schemas"]["DeliveryStatus"];
+            /** Format: date-time */
+            acceptedAtUtc: string;
+            attempts: number;
+            /** Format: date-time */
+            nextAttemptAtUtc?: string | null;
+            /** Format: date-time */
+            leaseUntilUtc?: string | null;
+            /** Format: date-time */
+            cloudReceivedAtUtc?: string | null;
+            lastError?: string | null;
+        };
+        QueuePage: {
+            items: components["schemas"]["QueueItem"][];
+            nextOffset: number | null;
+        };
+        WorkerSnapshot: {
+            /** Format: date-time */
+            lastIterationAtUtc: string | null;
+            lastIterationError: string | null;
+        };
+        QueueSummary: {
+            /** Format: date-time */
+            asOfUtc: string;
+            pending: number;
+            synchronized: number;
+            needsAttention: number;
+            oldestPendingAgeSeconds: number | null;
+            /** Format: date-time */
+            lastCloudReceiptAtUtc: string | null;
+            forwardingEnabled: boolean;
+            worker: components["schemas"]["WorkerSnapshot"];
         };
         ProblemDetails: {
             type?: string;
@@ -334,6 +405,56 @@ export interface operations {
             409: components["responses"]["Problem"];
             413: components["responses"]["Problem"];
             415: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSynchronizationSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Counts and timing metadata for this development plant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueueSummary"];
+                };
+            };
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSynchronizationEvents: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["DeliveryStatus"];
+                order?: "oldest" | "latest";
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A bounded page of delivery metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuePage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

@@ -52,14 +52,27 @@ export const resources = {
         httpsGuidance: "Open this station from the gateway HTTPS address to set up this browser.",
       },
       scan: {
-        context: "Development only · Barcode",
-        title: "Simulated barcode scan",
+        technologyLabel: "Simulated input technology",
+        technology: {
+          rfid: {
+            name: "RFID",
+            context: "Development only · RFID",
+            title: "Simulated RFID scan",
+            identifierLabel: "Synthetic RFID identifier",
+            send: "Send simulated RFID scan",
+          },
+          barcode: {
+            name: "Barcode",
+            context: "Development only · Barcode",
+            title: "Simulated barcode scan",
+            identifierLabel: "Synthetic barcode identifier",
+            send: "Send simulated barcode",
+          },
+        },
         boundary:
           "This records a raw observation only. No operator is signed in, and it does not record receiving, sorting, packing, dispatch, or another laundry operation.",
-        identifierLabel: "Synthetic barcode identifier",
         saving: "Saving to local gateway…",
         retrySame: "Retry same scan",
-        send: "Send simulated barcode",
       },
       feedback: {
         alreadySaved: {
@@ -80,7 +93,7 @@ export const resources = {
         },
         missingIdentifier: {
           label: "Not saved",
-          detail: "Enter a synthetic barcode identifier before sending.",
+          detail: "Enter a synthetic identifier before sending.",
         },
         unknown: {
           label: "Save result unknown",
@@ -89,6 +102,24 @@ export const resources = {
         rejected: {
           label: "Not saved",
           detail: "Check the station connection and identifier, then try again.",
+        },
+      },
+      audit: {
+        context: "Read-only diagnostics",
+        title: "Synchronization audit",
+        description:
+          "Shows gateway-to-cloud delivery metadata for this plant. RFID and barcode values are not displayed.",
+        refresh: "Refresh audit",
+        refreshing: "Refreshing…",
+        loading: "Loading synchronization audit…",
+        unavailable:
+          "The audit snapshot is temporarily unavailable. Locally saved observations are not removed.",
+        recentTitle: "Recent observations",
+        empty: "No observations have been recorded yet.",
+        status: {
+          pending: "Waiting",
+          synchronized: "Synchronized",
+          needsAttention: "Needs attention",
         },
       },
       scopeNote:
@@ -148,14 +179,27 @@ export const resources = {
         httpsGuidance: "Öppna stationen via gatewayens HTTPS-adress för att konfigurera webbläsaren.",
       },
       scan: {
-        context: "Endast utveckling · Streckkod",
-        title: "Simulerad streckkodsskanning",
+        technologyLabel: "Simulerad inmatningsteknik",
+        technology: {
+          rfid: {
+            name: "RFID",
+            context: "Endast utveckling · RFID",
+            title: "Simulerad RFID-skanning",
+            identifierLabel: "Syntetiskt RFID-ID",
+            send: "Skicka simulerad RFID-skanning",
+          },
+          barcode: {
+            name: "Streckkod",
+            context: "Endast utveckling · Streckkod",
+            title: "Simulerad streckkodsskanning",
+            identifierLabel: "Syntetiskt streckkods-ID",
+            send: "Skicka simulerad streckkod",
+          },
+        },
         boundary:
           "Detta registrerar endast en rå observation. Ingen operatör är inloggad och det registrerar inte mottagning, sortering, packning, utleverans eller någon annan tvätteriåtgärd.",
-        identifierLabel: "Syntetiskt streckkods-ID",
         saving: "Sparar till lokal gateway…",
         retrySame: "Försök med samma skanning igen",
-        send: "Skicka simulerad streckkod",
       },
       feedback: {
         alreadySaved: {
@@ -176,7 +220,7 @@ export const resources = {
         },
         missingIdentifier: {
           label: "Inte sparad",
-          detail: "Ange ett syntetiskt streckkods-ID innan du skickar.",
+          detail: "Ange ett syntetiskt ID innan du skickar.",
         },
         unknown: {
           label: "Okänt om skanningen sparades",
@@ -185,6 +229,24 @@ export const resources = {
         rejected: {
           label: "Inte sparad",
           detail: "Kontrollera stationsanslutningen och identifieraren och försök sedan igen.",
+        },
+      },
+      audit: {
+        context: "Skrivskyddad diagnostik",
+        title: "Synkroniseringslogg",
+        description:
+          "Visar leveransmetadata mellan gatewayen och molnet för den här anläggningen. RFID- och streckkodsvärden visas inte.",
+        refresh: "Uppdatera loggen",
+        refreshing: "Uppdaterar…",
+        loading: "Läser in synkroniseringsloggen…",
+        unavailable:
+          "Loggen är tillfälligt otillgänglig. Lokalt sparade observationer tas inte bort.",
+        recentTitle: "Senaste observationerna",
+        empty: "Inga observationer har registrerats än.",
+        status: {
+          pending: "Väntar",
+          synchronized: "Synkroniserad",
+          needsAttention: "Behöver åtgärdas",
         },
       },
       scopeNote:

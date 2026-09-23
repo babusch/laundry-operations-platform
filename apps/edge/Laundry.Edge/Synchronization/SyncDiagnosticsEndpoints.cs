@@ -58,16 +58,20 @@ public static class SyncDiagnosticsEndpoints
                 app.Configuration.GetValue<bool>("Forwarding:Enabled"), worker.Read()));
         }).Produces<QueueSummary>();
 
-        group.MapGet("/events", async (string? status, int? offset, int? limit, PlantDbContext db, CancellationToken ct) =>
+        group.MapGet("/events", async (string? status, string? order, int? offset, int? limit, PlantDbContext db, CancellationToken ct) =>
         {
             if (status is not (null or "pending" or "synchronized" or "needsAttention") ||
+                order is not (null or "oldest" or "latest") ||
                 offset is < 0 or > 1000000 || limit is < 1 or > 100)
-                return Results.Problem(statusCode: 400, title: "Use a valid status, offset 0–1000000, and limit 1–100.");
+                return Results.Problem(statusCode: 400, title: "Use a valid status, order, offset 0–1000000, and limit 1–100.");
             var query = Query(db, source);
             if (status is not null) query = query.Where(x => x.Status == status);
             var start = offset ?? 0;
             var size = limit ?? 50;
-            var rows = await query.OrderBy(x => x.AcceptedAtUtc).ThenBy(x => x.EventId).Skip(start).Take(size + 1).ToListAsync(ct);
+            var ordered = order == "latest"
+                ? query.OrderByDescending(x => x.AcceptedAtUtc).ThenByDescending(x => x.EventId)
+                : query.OrderBy(x => x.AcceptedAtUtc).ThenBy(x => x.EventId);
+            var rows = await ordered.Skip(start).Take(size + 1).ToListAsync(ct);
             return Results.Ok(new { items = rows.Take(size), nextOffset = rows.Count > size ? (int?)(start + size) : null });
         });
         group.MapGet("/events/{eventId:guid}", async (Guid eventId, PlantDbContext db, CancellationToken ct) =>
