@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "@laundry/api-client": "workspace:*",
+    "i18next": "^26.4.2",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-dom": "^19.3.0",
+    "react-i18next": "^17.0.14"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

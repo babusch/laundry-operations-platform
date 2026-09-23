@@ -35,6 +35,16 @@ In descending order:
 - Use plain, direct labels based on plant vocabulary. Avoid vague navigation names and unexplained technical synchronization terms.
 - Do not use blur, translucency, low contrast, parallax, or decorative motion where dust, glare, older displays, or operator urgency could reduce readability.
 
+## Language and localization
+
+- English and Swedish are the initial supported station languages. English is the fallback when a translation is unavailable.
+- Keep operator-facing text in localization resources rather than embedding it directly in components. Internal event names, status codes, identifiers, and API contracts remain language-neutral.
+- Choose a saved browser/station preference first, then a supported browser language. A plant default and operator preference may supersede this once those configuration models exist.
+- Bundle essential station translations with the PWA so changing language and understanding offline states never depend on cloud availability.
+- Use locale-aware formatting for dates, times, numbers, quantities, weights, and currencies. Do not concatenate translated fragments where word order or plural forms may differ.
+- Update the document language for assistive technology and test layouts with every supported language, including narrow screens and enlarged text.
+- Prefer a familiar native language selector with a large touch target. A language change is immediate and does not interrupt or reinterpret in-progress operational work.
+
 ### Production scan workspace direction
 
 - Design the primary capture flow for high-throughput RFID use, while keeping barcode and manual paths clearly available where the workflow permits them.

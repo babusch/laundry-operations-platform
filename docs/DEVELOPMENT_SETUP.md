@@ -397,6 +397,8 @@ After setup, the Development page displays a synthetic barcode field. **Send sim
 
 If the page says **Save result unknown**, the connection may have failed after the gateway committed. Use **Retry same scan**; the page retains the exact immutable request and the gateway's idempotency rules prevent a duplicate. A definite rejection unlocks the field for correction. The page still has no browser emergency queue or service worker.
 
+The language selector supports English and Swedish without a network request. A saved selection takes precedence over the browser language and English is the fallback. Changing it updates the page title and document language and stores only the language code in local browser storage.
+
 The Development connection string `ConnectionStrings:Plant` uses database `laundry_plant`, user `laundry_edge`, local-only password `laundry_edge_local_dev_only`, and port 15433. Other environments must provide `ConnectionStrings__Plant`; do not expose this unauthenticated foundation over the network. The launch profile binds to localhost. If you override `PLANT_POSTGRES_*` in `.env`, also supply a matching `ConnectionStrings__Plant` in the gateway terminal: ASP.NET Core does not automatically read `.env`.
 
 To try a plant database outage while the gateway remains running:

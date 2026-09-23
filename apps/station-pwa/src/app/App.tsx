@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LocalReceipt, SubmitScanV2 } from "@laundry/api-client";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { checkGatewayReadiness } from "../gateway/readiness";
 import { enrollDevelopmentBrowser } from "../gateway/development-enrollment";
@@ -13,6 +15,12 @@ import {
   submitScanToGateway,
   type ScanSubmissionOutcome,
 } from "../gateway/scan-submission";
+import {
+  normalizeLanguage,
+  persistLanguage,
+  supportedLanguages,
+} from "../i18n/i18n";
+import type { SupportedLanguage } from "../i18n/resources";
 
 type ConnectionState = "checking" | "ready" | "unavailable";
 type EnrollmentState = "checking" | SourceSessionStatus;
@@ -33,86 +41,85 @@ type AppProps = {
   createScanRequest?: (identifier: string) => SubmitScanV2;
 };
 
-function feedbackForReceipt(receipt: LocalReceipt): ScanFeedback {
+function feedbackForReceipt(receipt: LocalReceipt, t: TFunction): ScanFeedback {
   if (receipt.status === "alreadyAcceptedLocally") {
     return {
-      label: "Already saved locally",
-      detail: "The gateway recognized this unchanged retry and did not duplicate it.",
+      label: t("feedback.alreadySaved.label"),
+      detail: t("feedback.alreadySaved.detail"),
       tone: "success",
     };
   }
 
   if (receipt.deliveryStatus === "synchronized") {
     return {
-      label: "Saved locally and synchronized",
-      detail: "The gateway durably stored this observation and the cloud confirmed it.",
+      label: t("feedback.synchronized.label"),
+      detail: t("feedback.synchronized.detail"),
       tone: "success",
     };
   }
 
   if (receipt.deliveryStatus === "needsAttention") {
     return {
-      label: "Saved locally — synchronization needs attention",
-      detail: "The observation is safe at this plant, but cloud delivery needs review.",
+      label: t("feedback.needsAttention.label"),
+      detail: t("feedback.needsAttention.detail"),
       tone: "warning",
     };
   }
 
   return {
-    label: "Saved locally",
-    detail: "The observation is safe at this plant and waiting for cloud synchronization.",
+    label: t("feedback.saved.label"),
+    detail: t("feedback.saved.detail"),
     tone: "success",
   };
 }
 
 const connectionContent: Record<
   ConnectionState,
-  { icon: string; label: string; detail: string }
+  { icon: string; labelKey: string; detailKey: string }
 > = {
   checking: {
     icon: "…",
-    label: "Checking gateway…",
-    detail: "Confirming that durable local storage is available.",
+    labelKey: "connection.checking.label",
+    detailKey: "connection.checking.detail",
   },
   ready: {
     icon: "✓",
-    label: "Gateway ready",
-    detail: "Local plant storage is available. Cloud status is not checked yet.",
+    labelKey: "connection.ready.label",
+    detailKey: "connection.ready.detail",
   },
   unavailable: {
     icon: "!",
-    label: "Gateway unavailable",
-    detail: "Local storage cannot be confirmed. Scans cannot be saved.",
+    labelKey: "connection.unavailable.label",
+    detailKey: "connection.unavailable.detail",
   },
 };
 
 const enrollmentContent: Record<
   EnrollmentState,
-  { icon: string; label: string; detail: string; tone: string }
+  { icon: string; labelKey: string; detailKey: string; tone: string }
 > = {
   checking: {
     icon: "…",
-    label: "Checking station setup…",
-    detail: "Confirming whether this browser is enrolled with the local gateway.",
+    labelKey: "enrollment.checking.label",
+    detailKey: "enrollment.checking.detail",
     tone: "checking",
   },
   enrolled: {
     icon: "✓",
-    label: "Station setup complete",
-    detail:
-      "This browser is enrolled with the local gateway. Operator sign-in is not implemented yet.",
+    labelKey: "enrollment.enrolled.label",
+    detailKey: "enrollment.enrolled.detail",
     tone: "ready",
   },
   notEnrolled: {
     icon: "!",
-    label: "Station setup required",
-    detail: "This browser has not been enrolled with the local gateway.",
+    labelKey: "enrollment.notEnrolled.label",
+    detailKey: "enrollment.notEnrolled.detail",
     tone: "warning",
   },
   unavailable: {
     icon: "!",
-    label: "Station setup unavailable",
-    detail: "The gateway answered, but station enrollment could not be checked.",
+    labelKey: "enrollment.unavailable.label",
+    detailKey: "enrollment.unavailable.detail",
     tone: "unavailable",
   },
 };
@@ -125,6 +132,7 @@ export function App({
   submitScan = submitScanToGateway,
   createScanRequest = createSimulatedBarcodeScan,
 }: AppProps) {
+  const { t, i18n } = useTranslation();
   const [connection, setConnection] = useState<ConnectionState>("checking");
   const [enrollment, setEnrollment] = useState<EnrollmentState>("checking");
   const [enrollmentAction, setEnrollmentAction] =
@@ -134,6 +142,16 @@ export function App({
   const [scanAction, setScanAction] = useState<ScanActionState>("idle");
   const [pendingScan, setPendingScan] = useState<SubmitScanV2 | null>(null);
   const [scanFeedback, setScanFeedback] = useState<ScanFeedback | null>(null);
+  const activeLanguage = normalizeLanguage(i18n.resolvedLanguage) ?? "en";
+
+  useEffect(() => {
+    document.documentElement.lang = activeLanguage;
+    document.title = t("meta.title");
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute("content", t("meta.description"));
+    persistLanguage(activeLanguage);
+  }, [activeLanguage, t]);
 
   useEffect(() => {
     let active = true;
@@ -190,6 +208,10 @@ export function App({
     }
   };
 
+  const handleLanguageChange = (language: SupportedLanguage) => {
+    void i18n.changeLanguage(language);
+  };
+
   const handleScan = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (scanAction === "sending") return;
@@ -197,8 +219,8 @@ export function App({
     const normalizedIdentifier = identifier.trim();
     if (!pendingScan && normalizedIdentifier.length === 0) {
       setScanFeedback({
-        label: "Not saved",
-        detail: "Enter a synthetic barcode identifier before sending.",
+        label: t("feedback.missingIdentifier.label"),
+        detail: t("feedback.missingIdentifier.detail"),
         tone: "danger",
       });
       return;
@@ -214,8 +236,8 @@ export function App({
 
     if (outcome.kind === "uncertain") {
       setScanFeedback({
-        label: "Save result unknown",
-        detail: "Retry the same scan. The gateway will not create a duplicate.",
+        label: t("feedback.unknown.label"),
+        detail: t("feedback.unknown.detail"),
         tone: "warning",
       });
       return;
@@ -224,21 +246,42 @@ export function App({
     setPendingScan(null);
     if (outcome.kind === "rejected") {
       setScanFeedback({
-        label: "Not saved",
-        detail: "Check the station connection and identifier, then try again.",
+        label: t("feedback.rejected.label"),
+        detail: t("feedback.rejected.detail"),
         tone: "danger",
       });
       return;
     }
 
-    setScanFeedback(feedbackForReceipt(outcome.receipt));
+    setScanFeedback(feedbackForReceipt(outcome.receipt, t));
   };
 
   return (
     <main className="app-shell">
       <section className="foundation" aria-labelledby="station-title">
-        <p className="environment-label">Development simulator</p>
-        <h1 id="station-title">Laundry station</h1>
+        <div className="station-header">
+          <div>
+            <p className="environment-label">{t("environment")}</p>
+            <h1 id="station-title">{t("stationTitle")}</h1>
+          </div>
+          <label className="language-control">
+            <span>{t("language.label")}</span>
+            <select
+              value={activeLanguage}
+              onChange={(event) =>
+                handleLanguageChange(event.target.value as SupportedLanguage)
+              }
+            >
+              {supportedLanguages.map((language) => (
+                <option key={language} value={language}>
+                  {language === "en"
+                    ? t("language.english")
+                    : t("language.swedish")}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div
           className={`status-card status-card--${connection}`}
           role="status"
@@ -248,8 +291,8 @@ export function App({
             {content.icon}
           </span>
           <div>
-            <p className="status-line">{content.label}</p>
-            <p className="status-detail">{content.detail}</p>
+            <p className="status-line">{t(content.labelKey)}</p>
+            <p className="status-detail">{t(content.detailKey)}</p>
           </div>
         </div>
         {connection === "ready" ? (
@@ -262,14 +305,14 @@ export function App({
               {enrollmentStatus.icon}
             </span>
             <div>
-              <p className="status-line">{enrollmentStatus.label}</p>
-              <p className="status-detail">{enrollmentStatus.detail}</p>
+              <p className="status-line">{t(enrollmentStatus.labelKey)}</p>
+              <p className="status-detail">{t(enrollmentStatus.detailKey)}</p>
             </div>
           </div>
         ) : null}
         {retryAvailable ? (
           <button className="retry-button" onClick={() => setAttempt((value) => value + 1)}>
-            Retry connection
+            {t("actions.retryConnection")}
           </button>
         ) : null}
         {connection === "ready" &&
@@ -282,14 +325,14 @@ export function App({
               onClick={() => void handleEnrollment()}
             >
               {enrollmentAction === "working"
-                ? "Setting up browser…"
+                ? t("actions.settingUpBrowser")
                 : enrollmentAction === "failed"
-                  ? "Try setup again"
-                  : "Set up this browser"}
+                  ? t("actions.retrySetup")
+                  : t("actions.setupBrowser")}
             </button>
             {enrollmentAction === "failed" ? (
               <p className="action-error" role="alert">
-                Station setup could not be completed. Try again.
+                {t("setup.failed")}
               </p>
             ) : null}
           </div>
@@ -298,20 +341,18 @@ export function App({
         enrollment === "notEnrolled" &&
         !allowDevelopmentEnrollment ? (
           <p className="setup-guidance">
-            Open this station from the gateway HTTPS address to set up this browser.
+            {t("setup.httpsGuidance")}
           </p>
         ) : null}
         {connection === "ready" && enrollment === "enrolled" ? (
           <section className="scan-simulator" aria-labelledby="scan-simulator-title">
-            <p className="simulator-label">Development only · Barcode</p>
-            <h2 id="scan-simulator-title">Simulated barcode scan</h2>
-            <p className="scan-boundary">
-              This records a raw observation only. No operator is signed in, and it
-              does not record receiving, sorting, packing, dispatch, or another
-              laundry operation.
-            </p>
+            <p className="simulator-label">{t("scan.context")}</p>
+            <h2 id="scan-simulator-title">{t("scan.title")}</h2>
+            <p className="scan-boundary">{t("scan.boundary")}</p>
             <form onSubmit={(event) => void handleScan(event)}>
-              <label htmlFor="synthetic-barcode">Synthetic barcode identifier</label>
+              <label htmlFor="synthetic-barcode">
+                {t("scan.identifierLabel")}
+              </label>
               <input
                 id="synthetic-barcode"
                 value={identifier}
@@ -323,10 +364,10 @@ export function App({
               />
               <button className="scan-button" disabled={scanAction === "sending"}>
                 {scanAction === "sending"
-                  ? "Saving to local gateway…"
+                  ? t("scan.saving")
                   : pendingScan
-                    ? "Retry same scan"
-                    : "Send simulated barcode"}
+                    ? t("scan.retrySame")
+                    : t("scan.send")}
               </button>
             </form>
             {scanFeedback ? (
@@ -342,9 +383,7 @@ export function App({
           </section>
         ) : null}
         <p className="scope-note">
-          This Development-only application proves source enrollment and raw scan
-          storage. Operator sign-in and production workflow controls are not
-          implemented.
+          {t("scopeNote")}
         </p>
       </section>
     </main>

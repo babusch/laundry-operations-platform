@@ -88,3 +88,4 @@ The system should be:
 - Multi-plant and tenant-isolated
 - Recoverable after device, network, gateway, or cloud failures
 - Accessible and usable in noisy industrial environments
+- Multilingual, with English and Swedish prioritized for the pilot while allowing additional languages without changing workflows or event contracts

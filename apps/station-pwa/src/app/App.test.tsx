@@ -1,8 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubmitScanV2 } from "@laundry/api-client";
 
 import { App } from "./App";
+import { i18n, languageStorageKey } from "../i18n/i18n";
 
 const scanRequest: SubmitScanV2 = {
   schemaVersion: 2,
@@ -21,6 +22,11 @@ const acceptedReceipt = {
 };
 
 afterEach(cleanup);
+
+beforeEach(async () => {
+  window.localStorage.clear();
+  await i18n.changeLanguage("en");
+});
 
 describe("station application foundation", () => {
   it("shows an enrolled browser without claiming operator authentication", async () => {
@@ -44,6 +50,29 @@ describe("station application foundation", () => {
       screen.getByRole("heading", { name: "Simulated barcode scan" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/raw observation only/i)).toBeInTheDocument();
+  });
+
+  it("switches to Swedish and remembers the station preference", async () => {
+    render(
+      <App
+        checkGateway={vi.fn().mockResolvedValue(true)}
+        checkEnrollment={vi.fn().mockResolvedValue("notEnrolled")}
+        allowDevelopmentEnrollment
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Language"), {
+      target: { value: "sv" },
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Tvätteristation" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Gateway är redo")).toBeInTheDocument();
+    expect(screen.getByLabelText("Språk")).toHaveValue("sv");
+    expect(document.documentElement.lang).toBe("sv");
+    expect(document.title).toBe("Simulator för tvätteristation");
+    expect(window.localStorage.getItem(languageStorageKey)).toBe("sv");
   });
 
   it("shows when the browser still needs station setup", async () => {
