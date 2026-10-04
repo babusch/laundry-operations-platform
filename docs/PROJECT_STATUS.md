@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-09-23
+Last updated: 2026-10-04
 
 ## Current phase
 
@@ -47,6 +47,16 @@ Before that implementation begins, confirm:
 - Regulatory, hygiene, retention, and data-residency constraints.
 
 ## Active architectural baseline
+
+Approved initial receiving duration (2026-10-04): receiving stays open until whole-order completion, including during processing and dispatch. There is no separate receiving-close action in the initial scope. A soft receiving-complete marker, audited late additions, and resume behavior are documented as a deferred proposal for future review in [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md).
+
+Approved receiving-start and exception behavior (2026-10-04): the first-item flow combines selection of a planned order, explicit confirmation to start receiving, and durable recording of the first receipt. Receiving activation is shared plant-wide. Ordinary operators may resolve a missing incoming scan at dispatch through a reasoned late-receipt correction, preserving the missing-scan history and rejecting silent customer/order reassignment. Full order-selection and lifecycle rules still need review.
+
+Approved order-creation policy (2026-10-04): manual creation is the default. Automatic creation requires explicit enablement for a specific customer. Automatic triggers, order selection, completion, and handling a scan without a suitable order still require review.
+
+Approved advance-planning requirements (2026-10-04): order creation uses customer, planned receiving date, and planned delivery date, with optional customer reference and notes. Management may create orders before receipt. Recurring customer schedules support arrangements such as Monday collection and Wednesday delivery, with a separate order per service occurrence. Schedule generation policy, holiday handling, and changes to existing future orders still need review; configuring a schedule does not implicitly enable automatic creation.
+
+Approved workflow direction (2026-10-04): standard service-cycle orders group customer items toward a planned delivery date and can include multiple arrivals/dispatches. Optional continuous tracking supports internal cleaning teams, represented as non-billable laundry customers. Charging and order handling are independent settings. Both pilot modes require the same RFID-tagged items to return to the customer/team that handed them in. These decisions are documented in [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md); creation, completion, partial-dispatch, and exception details still need review before implementation.
 
 Latest identity verification (2026-09-13): Keycloak starts successfully, discovery/public signing keys and scoped client-credentials issuance pass over trusted HTTPS, and the gateway uses the token against the protected cloud route. Private `.env` stays ignored and untracked. Agents may let normal authorized application/Compose execution consume it internally, but may inspect values only for a specifically authorized development-credential investigation and must never publish or commit them.
 

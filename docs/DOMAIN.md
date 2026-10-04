@@ -20,6 +20,7 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 | Production batch | Group processed together through one or more production steps |
 | Process run | Actual execution of a wash, dry, finish, or other machine/program step |
 | Order | Shared customer turnaround through the plant, from incoming receipt through outgoing verification; see [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md) |
+| Continuous tracking account | Ongoing customer/team receipts and dispatches with exact-item turnaround matching, without requiring daily order creation or completion |
 | Delivery | Collection or distribution movement to a customer location |
 | Scan event | Observation originating from a trusted source at a station; physical equipment attribution is optional and must not claim more assurance than the integration provides |
 | Manual entry | Operator-attributed business action for an item or quantity that cannot be captured by a scanner; not a synthetic scan event |
@@ -81,3 +82,5 @@ State transitions must be explicit and validated. A scan should represent an ope
 Detailed state machines belong beside their owning module once workflows are validated with real users. Record material changes to shared terminology here.
 
 The confirmed pilot order behavior, provisional assumptions, invariants, and unresolved workflow questions are maintained in [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md).
+
+Approved on 2026-10-04: service-cycle orders are the standard direction; internal cleaning teams may use continuous tracking with non-billable service. Charging is independent of order handling. Both pilot modes return the same RFID-tagged physical items to the customer/team that handed them in. Repeated use creates successive item turnarounds; lifetime movement totals alone cannot establish whether a particular receipt was fulfilled.

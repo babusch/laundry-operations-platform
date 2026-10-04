@@ -28,6 +28,14 @@ Station behavior is configurable: dedicated operation, flexible operation select
 
 The pilot's order-level incoming/outgoing behavior is documented in [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md). That document distinguishes confirmed plant behavior from assumptions that still require validation.
 
+Service-cycle orders are the standard customer workflow. Optional continuous tracking supports internal cleaning teams that need incoming/outgoing history without daily order completion. Charging is configured independently; the pilot's internal teams are non-billable. Both pilot workflows require the same RFID-tagged items to return to the customer/team that supplied them.
+
+Order creation is manual by default. Automatic creation is an explicit per-customer option; recognizing a customer from a scan does not itself authorize creating an order.
+
+To begin receiving on a planned order, an operator selects it and confirms starting receiving as part of recording the first incoming item. That activation is shared across the plant. Ordinary operators may also resolve a missed receiving scan discovered at dispatch by confirming the customer/order and recording a reasoned, audited late-receipt correction before dispatch succeeds.
+
+Management can create orders in advance with customer, planned receiving date, and planned delivery date, plus optional customer reference and notes. Actual incoming/outgoing timestamps remain separate from planned dates. Recurring customer schedules should make arrangements such as Monday collection and Wednesday delivery easy to configure; each occurrence has its own service-cycle order. A schedule does not implicitly enable automatic generation. Collection/receipt and dispatch/customer delivery remain distinct milestones; generation policy and calendar exceptions still require review.
+
 1. Collection or customer handoff
 2. Receiving and identification
 3. Sorting and classification
@@ -51,6 +59,8 @@ The production scan workspace is expected to show at least the active order and 
 Operators also need explicit ways to record items or quantities that cannot be scanned and to document deviations or other operational problems. These are operator-attributed, auditable business actions with reasons and workflow context. They must not be represented as fabricated barcode or RFID observations.
 
 ## Initial product boundary
+
+After receiving starts, valid incoming scans remain allowed until the whole order is completed, including during processing and dispatch. A separate receiving-complete milestone is documented as a deferred proposal in the workflow document and requires future review before implementation.
 
 Build first:
 
