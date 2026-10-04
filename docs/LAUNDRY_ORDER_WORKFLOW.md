@@ -21,7 +21,7 @@ The pilot tracks individually tagged textiles. The same physical RFID-tagged ite
 - If no suitable order exists and automatic creation is disabled, the incoming scan cannot be counted against an order until an operator creates or selects one. The exact prompt and handling of the pending observation remain to be designed.
 - Recurring customer schedules are an approved product requirement; their order-generation policy still requires review. Import remains a possible future option.
 - Automatic selection must not guess between several suitable open orders. The operator must resolve ambiguous selection.
-- Completion requires every received item to be accounted for through outgoing verification or an explicitly authorized exception. Who confirms completion and the detailed exception rules remain open.
+- Completion requires every received item to be accounted for through outgoing verification or an explicitly authorized exception. Ordinary operators may confirm completion; detailed exception-resolution permissions remain open.
 
 ### Continuous tracking and charging
 
@@ -63,6 +63,17 @@ Proposed selection rules still subject to review: retain a station's explicitly 
 - Show originally scanned incoming items and receipt corrections distinctly while including both in accounted-for totals.
 - Customer mismatch or an existing receipt on another order requires separate conflict resolution; a missed-receipt correction must not silently reassign the item.
 - Holding only the affected RFID item while valid items continue, and preventing dispatch completion until unresolved items are addressed, remain proposed behavior for later review.
+
+### Completing the whole order
+
+- An ordinary authenticated, authorized operator chooses **Complete order** and reviews incoming, outgoing, and exception totals.
+- Every received physical item must have a matching outgoing action or a recorded resolution that accounts for its disposition, such as destruction or confirmed loss. Matching aggregate totals alone are insufficient.
+- Unresolved items keep the order open. Damage or tag unregistration alone does not establish a final disposition.
+- Completion always requires explicit operator confirmation, even when all items reconcile. The system must not automatically complete an order when counts match because additional arrivals may still be expected.
+- The completion check uses the latest durable state and must be coordinated with concurrent incoming, outgoing, and correction actions. A changed reconciliation result must be reviewed before completion succeeds.
+- Record the completing operator and completion time in the audit history. Report success only after completion is durable.
+- A completed order stops accepting new incoming and outgoing business actions. Historical actions, receipts, and retry responses remain accessible without duplicating business effects.
+- Reopening, post-completion corrections, and late-arrival routing require separate future decisions. Completing service-cycle orders does not close a customer's continuous tracking account.
 
 ### Shared order
 
@@ -154,7 +165,7 @@ The exact state machine is not approved yet. A reasonable starting vocabulary fo
 Open -> In processing -> Ready for dispatch -> Dispatching -> Completed
 ```
 
-The combined receiving-start interaction is approved, but the complete state machine remains provisional. Do not implement the other states until their entry and exit rules are validated. Completion, partial dispatch, reopening, and later corrections still need detailed behavior.
+The combined receiving-start interaction and explicit whole-order completion rules are approved. The intermediate state machine remains provisional. Do not implement intermediate states until their entry and exit rules are validated. Partial dispatch, reopening, and later corrections still need detailed behavior.
 
 Any later processing or dispatch status must preserve the approved initial rule that valid incoming scans remain possible until whole-order completion.
 
@@ -182,7 +193,6 @@ Review whether operators can reliably know that receiving is finished, whether t
 ## Provisional assumptions requiring validation
 
 - For customers that explicitly enable automatic creation, the first incoming item may trigger creation of a suitable order. Exact trigger, date, and concurrency rules remain to be decided.
-- An operator may explicitly confirm that an order is complete.
 - A customer may normally have one suitable open order for a given receiving/delivery cycle.
 
 These points are plausible but were described speculatively and are not approved behavior yet.
@@ -191,7 +201,7 @@ These points are plausible but were described speculatively and are not approved
 
 1. Can one customer have several arrivals or orders open on the same day?
 2. What distinguishes orders: receiving date, collection/load, route stop, customer reference, or another identifier?
-3. Who may create, complete, reopen, cancel, or change an order?
+3. Who may create, reopen, cancel, or change an order, and which item-exception resolutions require additional permission? Ordinary operators are already approved to confirm completion.
 4. What happens when another incoming item appears after completion?
 5. Can outgoing verification be partial, and can several dispatches fulfill one order?
 6. How are weekends, holidays, route schedules, cutoff times, and customer-specific service calendars used to calculate planned delivery?

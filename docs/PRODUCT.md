@@ -62,6 +62,8 @@ Operators also need explicit ways to record items or quantities that cannot be s
 
 After receiving starts, valid incoming scans remain allowed until the whole order is completed, including during processing and dispatch. A separate receiving-complete milestone is documented as a deferred proposal in the workflow document and requires future review before implementation.
 
+Ordinary operators explicitly confirm whole-order completion after reviewing incoming, outgoing, and exception totals. Every received item must be dispatched or have a recorded disposition; unresolved items keep the order open. Completion records the operator and time and stops further incoming/outgoing actions on the order. Matching totals never trigger automatic completion.
+
 Build first:
 
 - Tenants, plants, users, and roles

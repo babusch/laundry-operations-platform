@@ -48,6 +48,8 @@ Before that implementation begins, confirm:
 
 ## Active architectural baseline
 
+Approved whole-order completion (2026-10-04): ordinary operators explicitly confirm completion after reviewing incoming, outgoing, and exception totals. Each received item must be dispatched or accounted for through a recorded resolution; unresolved items block completion. Completion records the operator/time and stops further incoming/outgoing actions on that order. Concurrent receipts and corrections must be included in the durable completion check. Reopening and post-completion corrections remain unresolved.
+
 Approved initial receiving duration (2026-10-04): receiving stays open until whole-order completion, including during processing and dispatch. There is no separate receiving-close action in the initial scope. A soft receiving-complete marker, audited late additions, and resume behavior are documented as a deferred proposal for future review in [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md).
 
 Approved receiving-start and exception behavior (2026-10-04): the first-item flow combines selection of a planned order, explicit confirmation to start receiving, and durable recording of the first receipt. Receiving activation is shared plant-wide. Ordinary operators may resolve a missing incoming scan at dispatch through a reasoned late-receipt correction, preserving the missing-scan history and rejecting silent customer/order reassignment. Full order-selection and lifecycle rules still need review.
