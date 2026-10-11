@@ -73,6 +73,10 @@ public static class ManagementAuthentication
                 options.UsePkce = true;
                 options.RequireHttpsMetadata = true;
                 options.MapInboundClaims = false;
+                // OnTokenValidated below owns the minimal session identity. The default
+                // claim actions run afterward, delete "iss", and can remap profile data.
+                // Preserve our validated issuer/subject without reintroducing token claims.
+                options.ClaimActions.Clear();
                 options.SaveTokens = false;
                 options.GetClaimsFromUserInfoEndpoint = false;
                 options.UseTokenLifetime = false;

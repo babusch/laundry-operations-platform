@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 # Synthetic-only script tests: no live network, passwords, private files, or server launch.
 $helperRepositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $helperPath = Join-Path $helperRepositoryRoot 'deploy/local/Start-DevelopmentManagement.ps1'
-$helperTestState = @{ Mode = 'accepted'; LaunchCount = 0; ProbeCount = 0 }
+$helperTestState = @{ Mode = 'accepted'; LaunchCount = 0; ProbeCount = 0; WithAccess = $false }
 
 Add-Type -TypeDefinition @'
 public sealed class HelperTestResponse : System.Net.WebResponse {
@@ -48,11 +48,14 @@ function dotnet {
         [Environment]::GetEnvironmentVariable('ManagementAuthentication__Authority', 'Process') -cne 'https://localhost:8443/realms/laundry-development') {
         throw 'Synthetic launch settings assertion failed.'
     }
+    if ([Environment]::GetEnvironmentVariable('ManagementAccess__Enabled', 'Process') -cne $helperTestState.WithAccess.ToString()) {
+        throw 'Synthetic access opt-in assertion failed.'
+    }
     $global:LASTEXITCODE = 0
 }
 
 $helperSettingNames = @('ManagementAuthentication__Enabled', 'ManagementAuthentication__ClientSecret',
-    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId')
+    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId', 'ManagementAccess__Enabled')
 $helperOriginalSettings = @{}
 foreach ($settingName in $helperSettingNames) {
     $helperOriginalSettings[$settingName] = [Environment]::GetEnvironmentVariable($settingName, 'Process')
@@ -64,6 +67,9 @@ foreach ($settingName in $helperSettingNames) {
 
 & $helperPath *> $null
 if ($helperTestState.LaunchCount -ne 1) { throw 'Accepted helper flow did not launch once.' }
+$helperTestState.WithAccess = $true
+& $helperPath -WithAccess *> $null
+if ($helperTestState.LaunchCount -ne 2) { throw 'Explicit access opt-in did not launch once.' }
 foreach ($case in @(
     @{ Mode = 'rejected'; Expected = 'Keycloak did not accept*HTTP 400*' },
     @{ Mode = 'outage'; Expected = 'Could not verify*' },
@@ -73,15 +79,15 @@ foreach ($case in @(
     $helperTestState.Mode = $case.Mode
     $matched = $false
     try { & $helperPath *> $null } catch { $matched = $_.Exception.Message -like $case.Expected }
-    if (-not $matched -or $helperTestState.LaunchCount -ne 1) { throw ('Helper case failed: ' + $case.Mode) }
+    if (-not $matched -or $helperTestState.LaunchCount -ne 2) { throw ('Helper case failed: ' + $case.Mode) }
     foreach ($settingName in $helperSettingNames) {
         if ([Environment]::GetEnvironmentVariable($settingName, 'Process') -cne 'synthetic-baseline') {
             throw 'Helper did not restore process settings.'
         }
     }
 }
-if ($helperTestState.ProbeCount -ne 3) { throw 'Unexpected preflight request count.' }
-Write-Output ('All five synthetic management-helper cases passed on PowerShell ' + $PSVersionTable.PSVersion.ToString())
+if ($helperTestState.ProbeCount -ne 4) { throw 'Unexpected preflight request count.' }
+Write-Output ('All six synthetic management-helper cases passed on PowerShell ' + $PSVersionTable.PSVersion.ToString())
 } finally {
     foreach ($settingName in $helperSettingNames) {
         [Environment]::SetEnvironmentVariable($settingName, $helperOriginalSettings[$settingName], 'Process')

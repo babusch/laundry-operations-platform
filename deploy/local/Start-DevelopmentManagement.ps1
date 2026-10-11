@@ -1,9 +1,11 @@
+param([switch]$WithAccess)
+
 $ErrorActionPreference = 'Stop'
 
 $repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $projectPath = Join-Path $repositoryRoot 'apps/cloud/Laundry.Api/Laundry.Api.csproj'
 $settingNames = @('ManagementAuthentication__Enabled', 'ManagementAuthentication__ClientSecret',
-    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId')
+    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId', 'ManagementAccess__Enabled')
 $previousSettings = @{}
 foreach ($settingName in $settingNames) {
     $previousSettings[$settingName] = [Environment]::GetEnvironmentVariable($settingName, 'Process')
@@ -64,6 +66,7 @@ try {
     [Environment]::SetEnvironmentVariable('ManagementAuthentication__Enabled', 'true', 'Process')
     [Environment]::SetEnvironmentVariable('ManagementAuthentication__Authority', $managementAuthority, 'Process')
     [Environment]::SetEnvironmentVariable('ManagementAuthentication__ClientId', $managementClientId, 'Process')
+    [Environment]::SetEnvironmentVariable('ManagementAccess__Enabled', $WithAccess.IsPresent.ToString(), 'Process')
     $clientSecret = $null
 
     Write-Host 'Starting the development cloud API with management sign-in enabled.'

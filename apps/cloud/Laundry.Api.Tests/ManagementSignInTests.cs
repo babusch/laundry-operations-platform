@@ -6,6 +6,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Laundry.Api.Security;
+using Laundry.Api.Security.ManagementAccess;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,6 +17,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore;
+using Testcontainers.PostgreSql;
 using Microsoft.IdentityModel.Protocols;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
@@ -140,6 +143,11 @@ public sealed class ManagementSignInTests : IDisposable
         Assert.False(ticket.Properties.IsPersistent);
         Assert.DoesNotContain(ticket.Principal.Claims, claim => claim.Type == "laundry_permissions");
         Assert.Equal("interactive", ticket.Principal.FindFirstValue(ManagementAuthentication.SessionMarker));
+        Assert.Equal(Issuer, ticket.Principal.FindFirstValue("iss"));
+        Assert.True(ManagementSessionAccess.TryReadActor(AuthenticateResult.Success(ticket), Issuer, out var actor));
+        Assert.Equal("synthetic-person", actor!.Subject);
+        Assert.DoesNotContain(ticket.Principal.Claims, claim => claim.Type is "name" or "email");
+        Assert.Equal(4, ticket.Principal.Claims.Count());
     }
 
     [Theory]
@@ -160,6 +168,53 @@ public sealed class ManagementSignInTests : IDisposable
         Assert.Equal("{\"code\":\"management_login_failed\"}", await callback.Content.ReadAsStringAsync());
         using var status = await client.GetAsync("/management/session");
         Assert.Equal(HttpStatusCode.Unauthorized, status.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Database")]
+    public async Task RealLoginCookie_CanReadItsApplicationOwnedAssignment()
+    {
+        await using var postgres = new PostgreSqlBuilder("postgres:18.6-alpine3.23").Build();
+        await postgres.StartAsync();
+        var options = new DbContextOptionsBuilder<ManagementAccessDbContext>().UseNpgsql(postgres.GetConnectionString(),
+            provider => provider.MigrationsHistoryTable("__management_access_migrations", "identity_access")).Options;
+        await using var database = new ManagementAccessDbContext(options);
+        await database.Database.MigrateAsync();
+        var member = new PlantMembership
+        {
+            Id = Guid.NewGuid(),
+            ActorIssuer = Issuer,
+            ActorSubject = "synthetic-person",
+            TenantId = ManagementAccessStore.DevelopmentTenant,
+            PlantId = ManagementAccessStore.DevelopmentPlant,
+            IsActive = true,
+            CreatedAtUtc = DateTimeOffset.UtcNow
+        };
+        member.Permissions = Laundry.Api.Orders.OrderPlanningPermissions.Management.Select(permission =>
+            new PlantMembershipPermission { MembershipId = member.Id, Permission = permission }).ToList();
+        database.Memberships.Add(member);
+        database.AuditEntries.Add(new MembershipAuditEntry
+        {
+            Id = Guid.NewGuid(),
+            MembershipId = member.Id,
+            MembershipVersion = 1,
+            Action = "synthetic_assignment_created",
+            RecordedAtUtc = member.CreatedAtUtc,
+            RecordedBy = "synthetic-test-setup",
+            AfterState = "{}"
+        });
+        await database.SaveChangesAsync();
+        await using var app = Application(accessConnection: postgres.GetConnectionString());
+        using var client = Client(app);
+        using var callback = await LoginAsync(client);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        using var response = await client.GetAsync("/management/access");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var assignment = Assert.Single(json.RootElement.GetProperty("assignments").EnumerateArray());
+        Assert.Equal(ManagementAccessStore.DevelopmentPlant, assignment.GetProperty("plantId").GetGuid());
+        Assert.Equal(3, assignment.GetProperty("permissions").GetArrayLength());
+        Assert.False(json.RootElement.GetProperty("orderAccessEnabled").GetBoolean());
     }
 
     [Fact]
@@ -301,7 +356,8 @@ public sealed class ManagementSignInTests : IDisposable
     }
 
     private WebApplicationFactory<Program> Application(string environment = "Development", bool enabled = true,
-        string remoteAddress = "127.0.0.1", bool unavailable = false, string secret = "synthetic-client-secret", bool usePar = false) =>
+        string remoteAddress = "127.0.0.1", bool unavailable = false, string secret = "synthetic-client-secret", bool usePar = false,
+        string? accessConnection = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
@@ -309,6 +365,8 @@ public sealed class ManagementSignInTests : IDisposable
             builder.UseSetting("ManagementAuthentication:Authority", Issuer);
             builder.UseSetting("ManagementAuthentication:ClientId", ClientId);
             builder.UseSetting("ManagementAuthentication:ClientSecret", secret);
+            builder.UseSetting("ManagementAccess:Enabled", (accessConnection is not null).ToString());
+            if (accessConnection is not null) builder.UseSetting("ConnectionStrings:Laundry", accessConnection);
             builder.ConfigureServices(services =>
             {
                 services.AddSingleton<IStartupFilter>(new RemoteAddress(remoteAddress));
@@ -369,6 +427,8 @@ public sealed class ManagementSignInTests : IDisposable
         {
             new("nonce", _failure == "nonce" ? "wrong" : nonce),
             new("laundry_permissions", "scans.ingest"),
+            new("name", "Synthetic profile name"),
+            new("email", "synthetic@example.test"),
             new("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64)
         };
         if (_failure != "subject") claims.Add(new Claim("sub", "synthetic-person"));

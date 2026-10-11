@@ -36,6 +36,8 @@ Verify real login, sign-out, unauthenticated access, wrong scope, insufficient p
 
 ## Step 3: customer/plant eligibility and order routes (later)
 
+First reviewed sub-slice implemented: [Management access setup](MANAGEMENT_ACCESS_SETUP.md) defines application-owned membership/permission/audit storage, a verified management-cookie actor resolver, fresh scoped access reads, a separately enabled read-only assignment endpoint, and explicit Development provisioning for the demo account. Live migration/assignment is pending the user's setup command. No customer/tenant/plant catalog, order-access adapter, order endpoints, or permission administration UI is added in this slice.
+
 Introduce the smallest real plant/customer configuration and application-owned membership/grant storage. Implement `IOrderPlanningAccess` using the verified current human and current scoped grants, and check customer eligibility through its owning module. Re-evaluate access for first submissions and retries. These prerequisites must not be replaced with a permissive development fallback.
 
 Only then enable the reviewed order API and management UI. Cloud-to-plant publication and operational order authority remain separate slices, as described in [Order planning contract](ORDER_PLANNING_CONTRACT.md).
