@@ -14,7 +14,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Laundry.Api.Management;
 
 // Temporary Development navigation, not a replacement for the planned Next.js application.
-public static class DevelopmentManagementPages
+public static partial class DevelopmentManagementPages
 {
     public static void MapDevelopmentManagementPages(this WebApplication app)
     {
@@ -22,6 +22,10 @@ public static class DevelopmentManagementPages
         app.MapGet("/management", (Delegate)((HttpContext http) => Render(app, http, null, null)));
         app.MapGet("/management/orders/{plantId:guid}", (Guid plantId, HttpContext http) => Render(app, http, plantId, null));
         app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}", (Guid plantId, Guid orderId, HttpContext http) => Render(app, http, plantId, orderId));
+        app.MapGet("/management/orders/{plantId:guid}/new", (Guid plantId, HttpContext http) => CreatePage(app, http, plantId));
+        app.MapPost("/management/orders/{plantId:guid}/new", (Guid plantId, HttpContext http) => CreatePage(app, http, plantId));
+        app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}/edit", (Guid plantId, Guid orderId, HttpContext http) => CreatePage(app, http, plantId, orderId));
+        app.MapPost("/management/orders/{plantId:guid}/{orderId:guid}/edit", (Guid plantId, Guid orderId, HttpContext http) => CreatePage(app, http, plantId, orderId));
         app.MapPost("/management/sign-out", async (HttpContext http, IAntiforgery antiforgery) =>
         {
             var session = await http.AuthenticateAsync(ManagementAuthentication.CookieScheme);
@@ -95,6 +99,8 @@ public static class DevelopmentManagementPages
                             else
                             {
                                 content.Append($"<section class=panel><div class=section-head><h2>{H(order.OrderNumber)}</h2><span class=badge>{T("Planned", "Planerad")}</span></div><dl class=dates><div><dt>{T("Planned receiving", "Planerad inleverans")}</dt><dd>{Date(order.PlannedReceivingDate)}</dd></div><div><dt>{T("Planned delivery", "Planerad leverans")}</dt><dd>{Date(order.PlannedDeliveryDate)}</dd></div></dl><dl><dt>{T("Customer reference", "Kundreferens")}</dt><dd>{H(order.CustomerReference ?? "—")}</dd><dt>{T("Notes", "Anteckningar")}</dt><dd class=notes>{H(order.Notes ?? "—")}</dd><dt>{T("Version", "Version")}</dt><dd>{order.Version}</dd></dl></section>");
+                                if (order.Status == "planned" && matches[0].Permissions.Contains(OrderPlanningPermissions.EditPlan, StringComparer.Ordinal))
+                                    content.Append($"<p><a class=button href='/management/orders/{plantId:D}/{order.Id:D}/edit'>{T("Edit order", "Redigera order")}</a></p>");
                             }
                         }
                         else
@@ -107,7 +113,10 @@ public static class DevelopmentManagementPages
                             else
                             {
                                 var rows = await store.ListAsync(scope, limit, cursor?.ReceivingDate, cursor?.OrderId, http.RequestAborted);
-                                content.Append($"<section class=panel><div class=section-head><h2>{T("Saved orders", "Sparade ordrar")}</h2><span class=badge>{T("Read only", "Skrivskyddad")}</span></div><p>{T("Sorted by planned receiving date. Select an order to view its details.", "Sorterat efter planerat inleveransdatum. Välj en order för att visa detaljer.")}</p><div class=order-list>");
+                                content.Append($"<section class=panel><div class=section-head><h2>{T("Saved orders", "Sparade ordrar")}</h2><span class=badge>{T("Read only", "Skrivskyddad")}</span></div><p>{T("Sorted by planned receiving date. Select an order to view its details.", "Sorterat efter planerat inleveransdatum. Välj en order för att visa detaljer.")}</p>");
+                                if (matches[0].Permissions.Contains(OrderPlanningPermissions.Create, StringComparer.Ordinal))
+                                    content.Append($"<a class=button href='/management/orders/{plantId:D}/new'>{T("Create order", "Skapa order")}</a>");
+                                content.Append("<div class=order-list>");
                                 foreach (var order in rows.Take(limit))
                                     content.Append($"<a class=order href='/management/orders/{plantId:D}/{order.Id:D}'><div><strong>{H(order.OrderNumber)}</strong><span>{H(order.CustomerReference ?? T("No customer reference", "Ingen kundreferens"))}</span></div><div><span>{T("Receiving", "Inleverans")}</span><strong>{Date(order.PlannedReceivingDate)}</strong></div><div><span>{T("Delivery", "Leverans")}</span><strong>{Date(order.PlannedDeliveryDate)}</strong></div><span class=badge>{T("Planned", "Planerad")}</span></a>");
                                 if (rows.Length == 0) content.Append($"<p>{T("No saved orders in this plant yet.", "Inga sparade ordrar i den här anläggningen ännu.")}</p>");
@@ -129,6 +138,15 @@ public static class DevelopmentManagementPages
             catch (OrderPlanningException)
             { status = 403; content.Append(Alert(T("You no longer have permission to view these orders.", "Du har inte längre behörighet att visa dessa ordrar."))); }
         }
+        return Page(http, lang, signedIn, title, content.ToString(), status);
+    }
+
+    private static IResult Page(HttpContext http, string lang, bool signedIn, string title, string content, int status, bool create = false)
+    {
+        string T(string en, string sv) => lang == "sv" ? sv : en;
+        var languageMethod = create ? "post" : "get";
+        var languageOwner = create ? "form=order-create" : "";
+        var languageAction = create ? "form=order-create name=action value=language formnovalidate" : "";
         var sessionAction = $"<a class=button href='/management/login?home=true'>{T("Sign in", "Logga in")}</a>";
         if (signedIn)
         {
@@ -142,8 +160,8 @@ public static class DevelopmentManagementPages
         return Results.Content($"""
             <!doctype html><html lang="{lang}"><head><meta charset=utf-8><meta name=viewport content="width=device-width, initial-scale=1"><title>{title} · Laundry</title><style>{Styles}{Adjustments}</style></head>
             <body><a class=skip href=#content>{T("Skip to content", "Hoppa till innehåll")}</a><div class=shell><header><a class=brand href=/management>Laundry<span>{T("Management workspace", "Administrationsyta")}</span></a><nav aria-label="{T("Main navigation", "Huvudnavigation")}"><a href=/management>{T("Management", "Administration")}</a>{sessionAction}</nav></header>
-            <main id=content><div class=heading><div><p class=eyebrow>{T("Development · read-only workspace", "Utveckling · skrivskyddad arbetsyta")}</p><h1>{title}</h1></div><form method=get>{languageCursor}<label for=language>{T("Language", "Språk")}</label><select id=language name=lang><option value=sv {(lang == "sv" ? "selected" : "")}>Svenska</option><option value=en {(lang == "en" ? "selected" : "")}>English</option></select><button>{T("Apply", "Välj")}</button></form></div><p class=session>{(signedIn ? "● " + T("Signed in", "Inloggad") : "○ " + T("Signed out", "Utloggad"))}</p>{content}</main>
-            <footer>{T("Development only. Creating orders, receiving, dispatch and editing are not available on this page. Sign out ends this application's session, not the identity provider session.", "Endast för utveckling. Det går inte att skapa eller ändra ordrar, eller registrera in- och utleverans, på den här sidan. Utloggning avslutar appens session, inte identitetstjänstens session.")}</footer></div></body></html>
+            <main id=content tabindex=-1><div class=heading><div><p class=eyebrow>{T("Development · management workspace", "Utveckling · administrationsyta")}</p><h1>{title}</h1></div><form method={languageMethod}>{languageCursor}<label for=language>{T("Language", "Språk")}</label><span class=select-control><select id=language name=lang {languageOwner}><option value=sv {(lang == "sv" ? "selected" : "")}>Svenska</option><option value=en {(lang == "en" ? "selected" : "")}>English</option></select><svg class=select-chevron aria-hidden=true focusable=false viewBox="0 0 16 16"><path d="m3 6 5 5 5-5"/></svg></span><button {languageAction}>{T("Apply", "Välj")}</button></form></div><p class=session>{(signedIn ? "● " + T("Signed in", "Inloggad") : "○ " + T("Signed out", "Utloggad"))}</p>{content}</main>
+            <footer>{T("Development only. Receiving and dispatch are not available. Orders can be created and edited only as plans. Sign out ends this application's session, not the identity provider session.", "Endast för utveckling. Inleverans och utleverans är inte tillgängliga. Ordrar kan skapas och redigeras endast som planerade. Utloggning avslutar appens session, inte identitetstjänstens session.")}</footer></div></body></html>
             """, "text/html; charset=utf-8", statusCode: status);
     }
 
@@ -152,7 +170,15 @@ public static class DevelopmentManagementPages
     private const string Adjustments = """
         .alert{border-color:#DD6C65;background:#30201f}
         .alert.warning{border-color:#D4A84F;background:#302a1a}
+        .latest-plan{border:2px solid #D4A84F;border-radius:.75rem;padding:1rem;margin:1.5rem 0;background:#302a1a}.latest-plan h3{font-size:1.1rem;margin:0}.latest-plan dd{color:#DCE9E7}
         .order>div{min-width:0;overflow-wrap:anywhere}
+        .select-control{position:relative;display:inline-flex;align-items:center}
+        .select-control select{appearance:none;padding-inline:1rem 2.75rem;min-width:8.5rem}
+        .select-chevron{position:absolute;right:1rem;width:1rem;height:1rem;pointer-events:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+        input,textarea{font:inherit;min-height:2.75rem;border:1px solid #42666f;border-radius:.65rem;background:#102F38;color:#DCE9E7;padding:.65rem 1rem;width:100%;min-width:0}
+        input:focus-visible,textarea:focus-visible{outline:3px solid #42B8AD;outline-offset:4px}
+        .create-panel{max-width:52rem}.fields{display:grid;gap:1.25rem;margin:1.5rem 0}.field label{display:block;margin-bottom:.5rem}.field .select-control,.field select{width:100%;min-width:0}.field-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.25rem}.help,.field-error{font-size:.9rem;margin:.5rem 0 0;color:#9FB8B6}.field-error{color:#DCE9E7}.field.invalid{border-radius:.5rem;background:#30201f;box-shadow:0 0 0 4px #30201f,0 0 0 6px #DD6C65}.create-actions{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}.create-actions button{background:#42B8AD;color:#071A21;font-weight:600}.create-actions button:hover{border-color:#DCE9E7}.create-actions button:active{background:#35978e}fieldset{padding:0;margin:0;border:0;min-width:0}textarea{resize:vertical}button:disabled{cursor:default;opacity:.65}button:disabled:hover{border-color:#42666f}@media(max-width:48rem){.field-row{grid-template-columns:1fr}}
+        @media(forced-colors:active){.select-control select{appearance:auto}.select-chevron{display:none}}
         """;
     private const string Styles = """
         :root{color-scheme:dark;font:100%/1.5 system-ui,sans-serif;background:#071A21;color:#DCE9E7}*{box-sizing:border-box}html{scrollbar-gutter:stable}body{margin:0}a{color:#42B8AD}button,select{font:inherit}button,.button,select{min-height:2.75rem;border:1px solid #42666f;border-radius:.65rem;background:#102F38;color:#DCE9E7;padding:.65rem 1rem}button,.button{cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;touch-action:manipulation}button:hover,.button:hover{border-color:#42B8AD}button:active,.button:active{background:#244A53}a:focus-visible,button:focus-visible,select:focus-visible{outline:3px solid #42B8AD;outline-offset:4px}.shell{max-width:72rem;margin:auto;padding:0 1.5rem}header{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1.5rem 0;border-bottom:1px solid #244A53}.brand{font-weight:700;font-size:1.35rem;color:#DCE9E7;text-decoration:none}.brand span{display:block;font-size:.85rem;color:#9FB8B6;font-weight:400}nav,.actions{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}nav>a{padding:.65rem 0}main{min-height:60vh;padding:2.5rem 0}.heading,.section-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}.heading form{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}.eyebrow{color:#42B8AD;font-size:.8rem;letter-spacing:.06em;margin:0}h1{font-size:clamp(2rem,4vw,3rem);line-height:1.15;letter-spacing:-.025em;margin:.5rem 0}h2{font-size:1.3rem;margin:0}.session,p,dt,footer{color:#9FB8B6}.session{margin:1rem 0 1.5rem}.panel{background:#0C242C;border:1px solid #244A53;border-radius:1rem;padding:1.5rem}.badge{font-size:.85rem;border:1px solid #42666f;border-radius:2rem;padding:.25rem .75rem;white-space:nowrap}.order-list{display:grid;gap:.75rem;margin:1.5rem 0}.order{display:grid;grid-template-columns:1.4fr 1fr 1fr auto;gap:1rem;align-items:center;padding:1rem;border:1px solid #244A53;border-radius:.75rem;color:#DCE9E7;text-decoration:none;background:#102F38}.order:hover{border-color:#42B8AD}.order span:not(.badge){display:block;color:#9FB8B6;font-size:.9rem}.order strong{font-weight:600;display:block;font-variant-numeric:tabular-nums}dl.dates{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin:1.5rem 0}dt{margin-top:1rem;font-size:.9rem}dd{margin:0;overflow-wrap:anywhere}.notes{white-space:pre-wrap}.back{display:inline-block;margin-bottom:1rem}.alert{border:2px solid #D4A84F;background:#302a1a;color:#DCE9E7;padding:1rem;border-radius:.75rem}footer{font-size:.85rem;padding:1.5rem 0;border-top:1px solid #244A53}.skip{position:absolute;left:-100rem}.skip:focus{left:1rem;top:1rem;background:#071A21;padding:1rem;z-index:1}@media(max-width:42rem){header{align-items:flex-start;flex-wrap:wrap}.shell{padding:0 1rem}main{padding:1.5rem 0}.heading form{width:100%}.order{grid-template-columns:1fr 1fr}.order>div:first-child{grid-column:1/-1}.order>.badge{justify-self:start}.panel{padding:1rem}dl.dates{grid-template-columns:1fr}nav{width:100%;justify-content:space-between}}@media(prefers-contrast:more){:root{color:#fff}.panel,.order,header,footer{border-color:#9FB8B6}p,dt,footer,.session{color:#DCE9E7}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto}} 

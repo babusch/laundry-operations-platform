@@ -3,8 +3,8 @@ info:
   title: Development planned-order planning
   version: 1.0.0
   description: >-
-    Opt-in loopback HTTPS management proof. Creation, details, and unfiltered lists are implemented.
-    No production rollout, order editing, receiving, or dispatch is implied.
+    Opt-in loopback HTTPS management proof. Creation, details, unfiltered lists and planned updates are implemented.
+    No production rollout, receiving, or dispatch is implied.
 servers:
   - url: https://localhost:7100
 paths:
@@ -216,6 +216,95 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /api/v1/plants/{plantId}/orders/{orderId}/plan:
+    put:
+      operationId: updatePlannedOrder
+      summary: Replace the five planning fields of a planned order
+      description: >-
+        Requires current orders.plan.edit and one active tenant assignment for the plant.
+        Tenant and human actor are derived from the protected session. Permission and
+        customer eligibility participate in the order transaction. All five fields must
+        be provided; null clears reference or notes. Unknown/duplicate fields are rejected.
+        If-Match must be the single strong canonical ID/version ETag from the latest read;
+        weak tags, wildcards and lists are not supported. A stale version never overwrites
+        another edit. Retain the exact body, If-Match and idempotency key after an uncertain
+        result. An authorized exact retry returns the original receipt before checking
+        current version or eligibility and never reapplies historical changes. Read current
+        details afterward, since a later edit may already exist. Unchanged saves retain
+        a receipt but do not advance the version or add a change audit. Responses are no-store.
+      security:
+        - managementSession: []
+          managementCsrf: []
+      parameters:
+        - name: plantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Fresh nonzero dashed UUID per deliberate save; retain for retries.
+          schema: { type: string, format: uuid }
+        - name: If-Match
+          in: header
+          required: true
+          description: Exact single strong ETag returned by the latest detail read, retained for retries.
+          schema: { type: string }
+        - name: X-Management-CSRF
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        description: Maximum encoded body size 16 KiB, including chunked bodies.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderPlan'
+      responses:
+        '200':
+          description: Durable update, unchanged save, or historical exact-retry receipt.
+          headers:
+            ETag:
+              schema: { type: string }
+            Location:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid fields, eligibility, key, CSRF, or malformed/unsupported If-Match.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: Valid human management session required; gateway credentials cannot edit.
+        '403':
+          description: Current permission/scope denied or transport rejected.
+        '404':
+          description: Order absent from authorized scope, feature disabled, or outside Development.
+        '409':
+          description: Non-planned order, changed key reuse, or ambiguous tenant scope.
+        '412':
+          description: version_conflict; If-Match targets another order or an outdated version. No edit applied.
+        '413':
+          description: Encoded request exceeds 16 KiB.
+        '415':
+          description: Application/json required.
+        '428':
+          description: order_precondition_required; If-Match is missing.
+        '503':
+          description: order_storage_unavailable; retry the exact body/key/precondition after recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   securitySchemes:
     managementSession:
@@ -246,6 +335,28 @@ components:
       type: object
       additionalProperties: false
       required: [customerId, plannedReceivingDate, plannedDeliveryDate]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        plannedReceivingDate:
+          type: string
+          format: date
+          description: Exact YYYY-MM-DD calendar date, future or past allowed.
+        plannedDeliveryDate:
+          type: string
+          format: date
+          description: Exact YYYY-MM-DD on or after receiving date; same-day allowed.
+        customerReference:
+          type: [string, 'null']
+          maxLength: 100
+        notes:
+          type: [string, 'null']
+          maxLength: 2000
+    UpdateOrderPlan:
+      type: object
+      additionalProperties: false
+      required: [customerId, plannedReceivingDate, plannedDeliveryDate, customerReference, notes]
       properties:
         customerId:
           type: string

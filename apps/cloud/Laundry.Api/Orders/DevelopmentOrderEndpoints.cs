@@ -122,69 +122,108 @@ public static class DevelopmentOrderEndpoints
             }
         }).RequireAuthorization(ManagementAuthentication.Policy).WithName("GetPlannedOrder");
 
-        app.MapPost("/api/v1/plants/{plantId:guid}/orders", async (Guid plantId, HttpContext http,
-            IAntiforgery antiforgery, ManagementAccessStore memberships, DbContextOptions<OrderDbContext> orderOptions,
-            DbContextOptions<ManagementAccessDbContext> membershipOptions, DbContextOptions<CustomerDbContext> customerOptions,
-            TimeProvider clock, CancellationToken ct) =>
-        {
-            var session = await http.AuthenticateAsync(ManagementAuthentication.CookieScheme);
-            if (!ManagementSessionAccess.TryReadActor(session, app.Configuration["ManagementAuthentication:Authority"]!.TrimEnd('/'), out var actor))
-                return Error(http, 401, "management_session_required");
-            try
-            {
-                await antiforgery.ValidateRequestAsync(http);
-            }
-            catch (AntiforgeryValidationException) { return Error(http, 400, "management_csrf_required"); }
-            if (!http.Request.HasJsonContentType()) return Error(http, 415, "order_json_required");
-            var keyHeader = http.Request.Headers["Idempotency-Key"];
-            if (keyHeader.Count != 1 || !Guid.TryParseExact(keyHeader[0], "D", out var key) || key == Guid.Empty)
-                return Error(http, 400, "order_idempotency_key_required");
-            try
-            {
-                var assignments = (await memberships.ReadAssignmentsAsync(actor!, ct)).Where(x => x.PlantId == plantId).ToArray();
-                if (assignments.Length == 0) return Error(http, 403, "access_denied");
-                if (assignments.Length != 1) return Error(http, 409, "plant_scope_ambiguous");
-                if (!assignments[0].Permissions.Contains(OrderPlanningPermissions.Create, StringComparer.Ordinal))
-                    return Error(http, 403, "access_denied");
+        app.MapPost("/api/v1/plants/{plantId:guid}/orders", (Guid plantId, HttpContext http) =>
+            Save(app, plantId, null, http)).RequireAuthorization(ManagementAuthentication.Policy).WithName("CreatePlannedOrder");
+        app.MapPut("/api/v1/plants/{plantId:guid}/orders/{orderId:guid}/plan", (Guid plantId, Guid orderId, HttpContext http) =>
+            Save(app, plantId, orderId, http)).RequireAuthorization(ManagementAuthentication.Policy).WithName("UpdatePlannedOrder");
+    }
 
-                const int maxBodyBytes = 16 * 1024;
-                if (http.Request.ContentLength > maxBodyBytes) return Error(http, 413, "order_request_too_large");
-                var buffer = new byte[maxBodyBytes + 1];
-                var count = 0;
-                while (count < buffer.Length)
-                {
-                    var read = await http.Request.Body.ReadAsync(buffer.AsMemory(count), ct);
-                    if (read == 0) break;
-                    count += read;
-                }
-                if (count > maxBodyBytes) return Error(http, 413, "order_request_too_large");
-                using var document = JsonDocument.Parse(buffer.AsMemory(0, count));
-                if (!TryParsePlan(document.RootElement, out var plan)) return Error(http, 400, "invalid_order_request");
-                var scope = new OrderPlanningScope(assignments[0].TenantId, plantId, actor!.Issuer, actor.Subject);
-                var access = new SessionOrderPlanningAccess(actor, membershipOptions, customerOptions);
-                var receipt = await new OrderPlanningStore(orderOptions, access, clock).CreateAsync(scope, key, plan!, ct);
-                http.Response.Headers.ETag = receipt.ETag;
-                http.Response.Headers.Location = receipt.Location;
-                return Results.Content(receipt.Body, "application/json", statusCode: receipt.Status);
-            }
-            catch (JsonException) { return Error(http, 400, "invalid_order_request"); }
-            catch (OrderPlanningException exception)
+    private static async Task<IResult> Save(WebApplication app, Guid plantId, Guid? orderId, HttpContext http)
+    {
+        var services = http.RequestServices;
+        var antiforgery = services.GetRequiredService<IAntiforgery>();
+        var memberships = services.GetRequiredService<ManagementAccessStore>();
+        var orderOptions = services.GetRequiredService<DbContextOptions<OrderDbContext>>();
+        var membershipOptions = services.GetRequiredService<DbContextOptions<ManagementAccessDbContext>>();
+        var customerOptions = services.GetRequiredService<DbContextOptions<CustomerDbContext>>();
+        var clock = services.GetRequiredService<TimeProvider>();
+        var ct = http.RequestAborted;
+        var session = await http.AuthenticateAsync(ManagementAuthentication.CookieScheme);
+        if (!ManagementSessionAccess.TryReadActor(session, app.Configuration["ManagementAuthentication:Authority"]!.TrimEnd('/'), out var actor))
+            return Error(http, 401, "management_session_required");
+        try
+        {
+            await antiforgery.ValidateRequestAsync(http);
+        }
+        catch (AntiforgeryValidationException) { return Error(http, 400, "management_csrf_required"); }
+        if (!http.Request.HasJsonContentType()) return Error(http, 415, "order_json_required");
+        var keyHeader = http.Request.Headers["Idempotency-Key"];
+        if (keyHeader.Count != 1 || !Guid.TryParseExact(keyHeader[0], "D", out var key) || key == Guid.Empty)
+            return Error(http, 400, "order_idempotency_key_required");
+        try
+        {
+            var assignments = (await memberships.ReadAssignmentsAsync(actor!, ct)).Where(x => x.PlantId == plantId).ToArray();
+            if (assignments.Length == 0) return Error(http, 403, "access_denied");
+            if (assignments.Length != 1) return Error(http, 409, "plant_scope_ambiguous");
+            if (!assignments[0].Permissions.Contains(orderId.HasValue ? OrderPlanningPermissions.EditPlan : OrderPlanningPermissions.Create, StringComparer.Ordinal))
+                return Error(http, 403, "access_denied");
+
+            long expectedVersion = 0;
+            if (orderId.HasValue)
             {
-                return Error(http, exception.Code switch
-                {
-                    "access_denied" => 403,
-                    "idempotency_conflict" => 409,
-                    _ => 400
-                }, exception.Code);
+                var condition = http.Request.Headers.IfMatch;
+                if (condition.Count == 0) return Error(http, 428, "order_precondition_required");
+                if (condition.Count != 1 || !TryReadETag(condition[0]!, out var taggedId, out expectedVersion))
+                    return Error(http, 400, "invalid_order_precondition");
+                if (taggedId != orderId.Value) return Error(http, 412, "version_conflict");
             }
-            catch (Exception exception) when (exception is DbException or TimeoutException ||
-                exception is InvalidOperationException { InnerException: DbException } ||
-                exception is DbUpdateException { InnerException: DbException })
+
+            const int maxBodyBytes = 16 * 1024;
+            if (http.Request.ContentLength > maxBodyBytes) return Error(http, 413, "order_request_too_large");
+            var buffer = new byte[maxBodyBytes + 1];
+            var count = 0;
+            while (count < buffer.Length)
             {
-                // A transport failure can follow commit: preserve/retry the exact key and body.
-                return Error(http, 503, "order_storage_unavailable");
+                var read = await http.Request.Body.ReadAsync(buffer.AsMemory(count), ct);
+                if (read == 0) break;
+                count += read;
             }
-        }).RequireAuthorization(ManagementAuthentication.Policy).WithName("CreatePlannedOrder");
+            if (count > maxBodyBytes) return Error(http, 413, "order_request_too_large");
+            using var document = JsonDocument.Parse(buffer.AsMemory(0, count));
+            if (!TryParsePlan(document.RootElement, out var plan) || (orderId.HasValue &&
+                (!document.RootElement.TryGetProperty("customerReference", out _) || !document.RootElement.TryGetProperty("notes", out _))))
+                return Error(http, 400, "invalid_order_request");
+            var scope = new OrderPlanningScope(assignments[0].TenantId, plantId, actor!.Issuer, actor.Subject);
+            var access = new SessionOrderPlanningAccess(actor, membershipOptions, customerOptions);
+            var store = new OrderPlanningStore(orderOptions, access, clock);
+            var receipt = orderId.HasValue
+                ? await store.UpdateAsync(scope, key, orderId.Value, expectedVersion, plan!, ct)
+                : await store.CreateAsync(scope, key, plan!, ct);
+            http.Response.Headers.ETag = receipt.ETag;
+            http.Response.Headers.Location = receipt.Location;
+            return Results.Content(receipt.Body, "application/json", statusCode: receipt.Status);
+        }
+        catch (JsonException) { return Error(http, 400, "invalid_order_request"); }
+        catch (OrderPlanningException exception)
+        {
+            return Error(http, exception.Code switch
+            {
+                "access_denied" => 403,
+                "idempotency_conflict" => 409,
+                "order_not_planned" => 409,
+                "order_not_found" => 404,
+                "version_conflict" => 412,
+                _ => 400
+            }, exception.Code);
+        }
+        catch (Exception exception) when (exception is DbException or TimeoutException ||
+            exception is InvalidOperationException { InnerException: DbException } ||
+            exception is DbUpdateException { InnerException: DbException })
+        {
+            // A transport failure can follow commit: preserve/retry the exact key and body.
+            return Error(http, 503, "order_storage_unavailable");
+        }
+    }
+
+    private static bool TryReadETag(string value, out Guid orderId, out long version)
+    {
+        orderId = default;
+        version = default;
+        // Exactly one strong, canonical ID/version tag: no wildcard, weak tag or list.
+        if (value.Length < 40 || value[0] != '"' || value[^1] != '"' || value[37] != ':') return false;
+        return Guid.TryParseExact(value.Substring(1, 36), "D", out orderId) && orderId != Guid.Empty &&
+            long.TryParse(value.AsSpan(38, value.Length - 39), NumberStyles.None, CultureInfo.InvariantCulture, out version) && version > 0 &&
+            value == $"\"{orderId:D}:{version.ToString(CultureInfo.InvariantCulture)}\"";
     }
 
     private static IResult Error(HttpContext http, int status, string code) => Results.Problem(

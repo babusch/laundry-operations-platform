@@ -254,6 +254,23 @@ public sealed class ManagementSignInTests : IDisposable
         var savedList = await client.GetFromJsonAsync<JsonElement>($"/api/v1/plants/{member.PlantId:D}/orders");
         Assert.Single(savedList.GetProperty("items").EnumerateArray());
         Assert.Equal("synthetic-person", (await orderDatabase.Orders.SingleAsync()).CreatedBySubject);
+        using var updateRequest = new HttpRequestMessage(HttpMethod.Put, createdOrder.Headers.Location + "/plan")
+        {
+            Content = JsonContent.Create(new
+            {
+                customerId = CustomerStore.DevelopmentCustomer,
+                plannedReceivingDate = "2030-01-01",
+                plannedDeliveryDate = "2030-01-04",
+                customerReference = (string?)null,
+                notes = "Synthetic authenticated edit"
+            })
+        };
+        updateRequest.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        updateRequest.Headers.IfMatch.Add(savedOrder.Headers.ETag!);
+        using var updatedOrder = await client.SendAsync(updateRequest);
+        Assert.Equal(HttpStatusCode.OK, updatedOrder.StatusCode);
+        Assert.Equal(2, (await updatedOrder.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("version").GetInt64());
+        Assert.Equal("synthetic-person", (await orderDatabase.AuditEntries.SingleAsync(x => x.Action == "order_plan_changed")).ActorSubject);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{Guid.NewGuid():D}/plants/{member.PlantId:D}/customers")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{member.TenantId:D}/plants/{Guid.NewGuid():D}/customers")).StatusCode);
         await database.Database.ExecuteSqlRawAsync("DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.read'");

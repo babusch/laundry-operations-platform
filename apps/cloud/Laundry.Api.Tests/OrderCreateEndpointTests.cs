@@ -17,6 +17,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -29,7 +30,7 @@ using Testcontainers.PostgreSql;
 namespace Laundry.Api.Tests;
 
 [Trait("Category", "Database")]
-public sealed class OrderCreateEndpointTests : IAsyncLifetime
+public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.6-alpine3.23").Build();
     private readonly string _subject = Guid.NewGuid().ToString();
@@ -82,6 +83,228 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task CreatePage_DraftCannotBeUsedByAnotherAuthenticatedPerson()
+    {
+        var original = await CreateForm();
+        var otherSubject = Guid.NewGuid().ToString();
+        await using var db = new ManagementAccessDbContext(_members);
+        await new ManagementAccessStore(db).InitializeDevelopmentAsync(otherSubject);
+        using var otherClient = Client(_app);
+        Cookie(otherClient, _app, otherSubject);
+        var other = await CreateForm(otherClient);
+        other.Values["draft"] = original.Values["draft"];
+        using var rejected = await otherClient.PostAsync(CreatePagePath, new FormUrlEncodedContent(other.Values));
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        await AssertCounts(0);
+    }
+
+    [Theory]
+    [InlineData("reference", 101)]
+    [InlineData("notes", 2001)]
+    [InlineData("receiving", 0)]
+    [InlineData("customer", 0)]
+    public async Task CreatePage_RejectsInvalidFieldsWithoutWriting(string field, int length)
+    {
+        var form = await CreateForm();
+        form.Values[field] = new string('x', length);
+        using var rejected = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Contains($"aria-invalid=true aria-describedby={field}-error", await rejected.Content.ReadAsStringAsync());
+        await AssertCounts(0);
+    }
+
+    [Fact]
+    public async Task CreatePage_UncertainCommitLocksExactFieldsAndRetryReturnsCommittedOrder()
+    {
+        var interceptor = new LoseCommitAcknowledgement();
+        await using var app = Application().WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.AddDbContext<OrderDbContext>(options => options.AddInterceptors(interceptor))));
+        using var client = Client(app);
+        Cookie(client, app);
+        var form = await CreateForm(client);
+        using var uncertain = await client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, uncertain.StatusCode);
+        var html = await uncertain.Content.ReadAsStringAsync();
+        Assert.Contains("The save result could not be confirmed", html);
+        Assert.Contains("Retry same save", html);
+        Assert.Contains("readonly", html);
+        Assert.Contains("id=customer name=customer required", html);
+        await AssertCounts(1); // The failure was raised after the real commit, not before it.
+        var lockedValues = HiddenValues(html);
+        foreach (var entry in form.Values.Where(x => x.Key != "draft" && !x.Key.StartsWith("__RequestVerificationToken", StringComparison.Ordinal)))
+            lockedValues[entry.Key] = entry.Value;
+        lockedValues["notes"] = "Changed retry";
+        using var changed = await client.PostAsync(CreatePagePath, new FormUrlEncodedContent(lockedValues));
+        Assert.Equal(HttpStatusCode.Conflict, changed.StatusCode);
+        lockedValues["notes"] = form.Values["notes"];
+        using var retry = await client.PostAsync(CreatePagePath, new FormUrlEncodedContent(lockedValues));
+        Assert.Equal(HttpStatusCode.SeeOther, retry.StatusCode);
+        await AssertCounts(1);
+    }
+
+    private sealed class LoseCommitAcknowledgement : DbTransactionInterceptor
+    {
+        private int _remaining = 1;
+        public override Task TransactionCommittedAsync(System.Data.Common.DbTransaction transaction, TransactionEndEventData eventData, CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Exchange(ref _remaining, 0) == 1) throw new NpgsqlException("Synthetic lost commit acknowledgement");
+            return Task.CompletedTask;
+        }
+    }
+
+    [Fact]
+    public async Task CreatePage_ShowsEligibleChoicesAndRetainsDraftAcrossLanguageAndValidation()
+    {
+        var form = await CreateForm();
+        Assert.Contains("Demo laundry customer", form.Html);
+        Assert.Contains("name=action value=language formnovalidate", form.Html);
+        Assert.DoesNotContain(_subject, form.Html);
+        form.Values["notes"] = "<script>synthetic note</script>";
+        form.Values["reference"] = "Keep my reference";
+        form.Values["delivery"] = "2030-01-01";
+        form.Values["action"] = "language";
+        form.Values["lang"] = "sv";
+        using var language = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.OK, language.StatusCode);
+        var html = await language.Content.ReadAsStringAsync();
+        Assert.Contains("Skapa order", html);
+        Assert.Contains("Keep my reference", html);
+        Assert.Contains("&lt;script&gt;synthetic note&lt;/script&gt;", html);
+        Assert.DoesNotContain("<script>", html);
+        await AssertCounts(0);
+        form.Values["action"] = "save";
+        using var invalid = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        html = await invalid.Content.ReadAsStringAsync();
+        Assert.Contains("Leverans kan inte vara före inleverans", WebUtility.HtmlDecode(html));
+        Assert.Contains("aria-invalid=true aria-describedby=delivery-error", html);
+        Assert.Contains("Keep my reference", html);
+        await AssertCounts(0);
+        form.Values["validation"] = "1";
+        form.Values["action"] = "language";
+        form.Values["lang"] = "en";
+        using var translated = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.OK, translated.StatusCode);
+        Assert.Contains("Delivery cannot be before receiving", await translated.Content.ReadAsStringAsync());
+        await AssertCounts(0);
+        form.Values["action"] = "save";
+        form.Values["delivery"] = "2030-01-03";
+        using var accepted = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.SeeOther, accepted.StatusCode);
+        await AssertCounts(1);
+    }
+
+    [Fact]
+    public async Task CreatePage_ConcurrentDoubleSaveAndLostResponseRetryProduceOneOrder()
+    {
+        var form = await CreateForm();
+        var responses = await Task.WhenAll(Enumerable.Range(0, 2).Select(_ => _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values))));
+        foreach (var response in responses) Assert.Equal(HttpStatusCode.SeeOther, response.StatusCode);
+        Assert.Equal(responses[0].Headers.Location, responses[1].Headers.Location);
+        using var retry = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(responses[0].Headers.Location, retry.Headers.Location);
+        var details = await _client.GetStringAsync(retry.Headers.Location);
+        Assert.Contains("ORD-000001", details);
+        Assert.Contains("Planned", details);
+        await AssertCounts(1);
+        foreach (var response in responses) response.Dispose();
+        form.Values["reference"] = "Changed request after acceptance";
+        using var conflict = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.Conflict, conflict.StatusCode);
+        await AssertCounts(1);
+    }
+
+    [Fact]
+    public async Task CreatePage_RequiresRealCsrfAndProtectedActorPlantDraft()
+    {
+        var form = await CreateForm();
+        var missing = new Dictionary<string, string>(form.Values);
+        missing.Remove(missing.Keys.Single(x => x.StartsWith("__RequestVerificationToken", StringComparison.Ordinal)));
+        using var csrf = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(missing));
+        Assert.Equal(HttpStatusCode.BadRequest, csrf.StatusCode);
+        form.Values["draft"] += "tampered";
+        using var tampered = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.BadRequest, tampered.StatusCode);
+        form = await CreateForm();
+        using var wrongPlant = await _client.PostAsync($"/management/orders/{Guid.NewGuid():D}/new", new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.BadRequest, wrongPlant.StatusCode);
+        using var anonymous = Client(_app);
+        using var denied = await anonymous.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.Unauthorized, denied.StatusCode);
+        await AssertCounts(0);
+    }
+
+    [Fact]
+    public async Task CreatePage_RechecksCreatePermissionAndCustomerEligibility()
+    {
+        var form = await CreateForm();
+        await using var customerDb = new CustomerDbContext(_customers);
+        await customerDb.Customers.ExecuteUpdateAsync(x => x.SetProperty(c => c.IsActive, false));
+        using var customerDenied = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.BadRequest, customerDenied.StatusCode);
+        Assert.Contains("no longer available", await customerDenied.Content.ReadAsStringAsync());
+        await using var memberDb = new ManagementAccessDbContext(_members);
+        await memberDb.Permissions.Where(x => x.Permission == OrderPlanningPermissions.Create).ExecuteDeleteAsync();
+        using var denied = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using var list = await _client.GetAsync($"/management/orders/{Plant:D}");
+        Assert.DoesNotContain($"href='{CreatePagePath}'", await list.Content.ReadAsStringAsync());
+        await AssertCounts(0);
+    }
+
+    [Fact]
+    public async Task CreatePage_StorageOutagePreservesRequestAndRecoversWithoutDuplicates()
+    {
+        var form = await CreateForm();
+        await _postgres.StopAsync();
+        using var outage = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, outage.StatusCode);
+        var html = await outage.Content.ReadAsStringAsync();
+        Assert.Contains("temporarily unavailable", html);
+        Assert.DoesNotContain("Npgsql", html);
+        Assert.Contains("Synthetic form reference", html);
+        Assert.Contains("Synthetic form notes", html);
+        await _postgres.StartAsync();
+        _app.Services.GetRequiredService<IConfiguration>()["ConnectionStrings:Laundry"] = _postgres.GetConnectionString();
+        _orders = new DbContextOptionsBuilder<OrderDbContext>().UseNpgsql(_postgres.GetConnectionString()).Options;
+        using var success = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(HttpStatusCode.SeeOther, success.StatusCode);
+        using var retry = await _client.PostAsync(CreatePagePath, new FormUrlEncodedContent(form.Values));
+        Assert.Equal(success.Headers.Location, retry.Headers.Location);
+        await AssertCounts(1);
+    }
+
+    private static string CreatePagePath => $"/management/orders/{Plant:D}/new";
+    private async Task AssertCounts(int expected)
+    {
+        await using var db = new OrderDbContext(_orders);
+        Assert.Equal(expected, await db.Orders.CountAsync());
+        Assert.Equal(expected, await db.AuditEntries.CountAsync());
+        Assert.Equal(expected, await db.CommandReceipts.CountAsync());
+    }
+
+    private static Dictionary<string, string> HiddenValues(string html) =>
+        System.Text.RegularExpressions.Regex.Matches(html, "<input type=hidden name='?([^' >]+)'? value='([^']*)'")
+            .GroupBy(x => x.Groups[1].Value, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => WebUtility.HtmlDecode(x.First().Groups[2].Value), StringComparer.Ordinal);
+
+    private async Task<(string Html, Dictionary<string, string> Values)> CreateForm(HttpClient? client = null)
+    {
+        client ??= _client;
+        client.DefaultRequestHeaders.Remove("X-Management-CSRF");
+        var html = await client.GetStringAsync(CreatePagePath + "?lang=en");
+        var values = HiddenValues(html);
+        values["customer"] = Customer.ToString("D");
+        values["receiving"] = "2030-01-02";
+        values["delivery"] = "2030-01-03";
+        values["reference"] = "Synthetic form reference";
+        values["notes"] = "Synthetic form notes";
+        values["lang"] = "en";
+        values["action"] = "save";
+        return (html, values);
+    }
+
+    [Fact]
     public async Task ManagementPages_ShowSignedOutHomeAndFriendlySessionExpiry()
     {
         using var client = Client(_app);
@@ -90,6 +313,11 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         var html = await home.Content.ReadAsStringAsync();
         Assert.Contains("Sign in to continue", html);
         Assert.Contains("/management/login?home=true", html);
+        Assert.Contains("<label for=language>Language</label><span class=select-control><select id=language name=lang", html);
+        Assert.Contains("class=select-chevron aria-hidden=true focusable=false", html);
+        Assert.Contains("padding-inline:1rem 2.75rem;min-width:8.5rem", html);
+        Assert.Contains("@media(forced-colors:active)", html);
+        Assert.Contains("<main id=content tabindex=-1>", html);
         Assert.Equal("no-store", home.Headers.CacheControl!.ToString());
         Assert.NotNull(home.Headers.GetValues("Content-Security-Policy"));
         using var expired = await client.GetAsync($"/management/orders/{Plant:D}?lang=sv");
@@ -439,6 +667,7 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         using var response = await Create(anonymous, Guid.NewGuid());
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Update(anonymous, Guid.NewGuid(), $"{Path}/{Guid.NewGuid():D}/plan", null)).StatusCode);
         var gateway = new JwtSecurityToken(ManagementAccessStore.DevelopmentIssuer, "laundry-cloud-api",
             [new Claim("sub", _subject), new Claim("client_id", "gateway-development"), new Claim("laundry_permissions", "orders.create")],
             DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(5), new SigningCredentials(GatewayTestKey, SecurityAlgorithms.HmacSha256));
@@ -473,6 +702,7 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Contains("plant_scope_ambiguous", await response.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.Conflict, (await _client.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await _client.GetAsync(Path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Update(_client, Guid.NewGuid(), $"{Path}/{Guid.NewGuid():D}/plan", null)).StatusCode);
         await using var orders = new OrderDbContext(_orders);
         Assert.Equal(0, await orders.Orders.CountAsync());
     }
@@ -541,6 +771,11 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(status, (int)(await client.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
         Assert.Equal(status, (int)(await client.GetAsync(Path)).StatusCode);
+        Assert.Equal(status, (int)(await client.GetAsync(CreatePagePath)).StatusCode);
+        Assert.Equal(status, (int)(await client.PostAsync(CreatePagePath, new FormUrlEncodedContent([]))).StatusCode);
+        Assert.Equal(status, (int)(await Update(client, Guid.NewGuid(), $"{Path}/{Guid.NewGuid():D}/plan", null)).StatusCode);
+        Assert.Equal(status, (int)(await client.GetAsync(EditPath(Guid.NewGuid()))).StatusCode);
+        Assert.Equal(status, (int)(await client.PostAsync(EditPath(Guid.NewGuid()), new FormUrlEncodedContent([]))).StatusCode);
     }
 
     [Fact]
@@ -568,12 +803,14 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         var access = new SessionOrderPlanningAccess(actor, _members, _customers);
         await using var lease = await access.BindTransactionAsync(db.Database.GetDbConnection(), transaction.GetDbTransaction(), scope, default);
         Assert.True(await access.IsAllowedAsync(scope, OrderPlanningPermissions.Create, default));
+        Assert.True(await access.IsAllowedAsync(scope, OrderPlanningPermissions.EditPlan, default));
         Assert.True(await access.IsCustomerEligibleAsync(scope, Customer, default));
         await using var other = new NpgsqlConnection(_postgres.GetConnectionString());
         await other.OpenAsync();
         foreach (var sql in new[] {
             "UPDATE identity_access.plant_memberships SET is_active = false",
             "DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.create'",
+            "DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.plan.edit'",
             "UPDATE customers.laundry_customers SET is_active = false",
             "UPDATE customers.plant_services SET is_active = false" })
         {
@@ -629,11 +866,12 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
     private static HttpClient Client(WebApplicationFactory<Program> app, string origin = "https://localhost:7100") => app.CreateClient(
         new WebApplicationFactoryClientOptions { BaseAddress = new Uri(origin), AllowAutoRedirect = false });
 
-    private void Cookie(HttpClient client, WebApplicationFactory<Program> app)
+    private void Cookie(HttpClient client, WebApplicationFactory<Program> app, string? subject = null)
     {
+        subject ??= _subject;
         var principal = new ClaimsPrincipal(new ClaimsIdentity([
-            new Claim("iss", ManagementAccessStore.DevelopmentIssuer), new Claim("sub", _subject),
-            new Claim(ClaimTypes.NameIdentifier, _subject), new Claim(ManagementAuthentication.SessionMarker, "interactive")
+            new Claim("iss", ManagementAccessStore.DevelopmentIssuer), new Claim("sub", subject),
+            new Claim(ClaimTypes.NameIdentifier, subject), new Claim(ManagementAuthentication.SessionMarker, "interactive")
         ], ManagementAuthentication.CookieScheme));
         var options = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>().Get(ManagementAuthentication.CookieScheme);
         var ticket = new AuthenticationTicket(principal, new AuthenticationProperties

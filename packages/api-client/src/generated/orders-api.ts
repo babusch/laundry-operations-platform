@@ -48,6 +48,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plants/{plantId}/orders/{orderId}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace the five planning fields of a planned order
+         * @description Requires current orders.plan.edit and one active tenant assignment for the plant. Tenant and human actor are derived from the protected session. Permission and customer eligibility participate in the order transaction. All five fields must be provided; null clears reference or notes. Unknown/duplicate fields are rejected. If-Match must be the single strong canonical ID/version ETag from the latest read; weak tags, wildcards and lists are not supported. A stale version never overwrites another edit. Retain the exact body, If-Match and idempotency key after an uncertain result. An authorized exact retry returns the original receipt before checking current version or eligibility and never reapplies historical changes. Read current details afterward, since a later edit may already exist. Unchanged saves retain a receipt but do not advance the version or add a change audit. Responses are no-store.
+         */
+        put: operations["updatePlannedOrder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -72,6 +92,22 @@ export interface components {
             plannedDeliveryDate: string;
             customerReference?: string | null;
             notes?: string | null;
+        };
+        UpdateOrderPlan: {
+            /** Format: uuid */
+            customerId: string;
+            /**
+             * Format: date
+             * @description Exact YYYY-MM-DD calendar date, future or past allowed.
+             */
+            plannedReceivingDate: string;
+            /**
+             * Format: date
+             * @description Exact YYYY-MM-DD on or after receiving date; same-day allowed.
+             */
+            plannedDeliveryDate: string;
+            customerReference: string | null;
+            notes: string | null;
         };
         Order: {
             /** Format: uuid */
@@ -337,6 +373,116 @@ export interface operations {
                 };
             };
             /** @description Storage unavailable; read can be retried without creating an order. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updatePlannedOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Fresh nonzero dashed UUID per deliberate save; retain for retries. */
+                "Idempotency-Key": string;
+                /** @description Exact single strong ETag returned by the latest detail read, retained for retries. */
+                "If-Match": string;
+                "X-Management-CSRF": string;
+            };
+            path: {
+                plantId: string;
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        /** @description Maximum encoded body size 16 KiB, including chunked bodies. */
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrderPlan"];
+            };
+        };
+        responses: {
+            /** @description Durable update, unchanged save, or historical exact-retry receipt. */
+            200: {
+                headers: {
+                    ETag?: string;
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            /** @description Invalid fields, eligibility, key, CSRF, or malformed/unsupported If-Match. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Valid human management session required; gateway credentials cannot edit. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current permission/scope denied or transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Order absent from authorized scope, feature disabled, or outside Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non-planned order, changed key reuse, or ambiguous tenant scope. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description version_conflict; If-Match targets another order or an outdated version. No edit applied. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Encoded request exceeds 16 KiB. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Application/json required. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description order_precondition_required; If-Match is missing. */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description order_storage_unavailable; retry the exact body/key/precondition after recovery. */
             503: {
                 headers: {
                     [name: string]: unknown;
