@@ -82,6 +82,161 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ManagementPages_ShowSignedOutHomeAndFriendlySessionExpiry()
+    {
+        using var client = Client(_app);
+        using var home = await client.GetAsync("/management?lang=en");
+        Assert.Equal(HttpStatusCode.OK, home.StatusCode);
+        var html = await home.Content.ReadAsStringAsync();
+        Assert.Contains("Sign in to continue", html);
+        Assert.Contains("/management/login?home=true", html);
+        Assert.Equal("no-store", home.Headers.CacheControl!.ToString());
+        Assert.NotNull(home.Headers.GetValues("Content-Security-Policy"));
+        using var expired = await client.GetAsync($"/management/orders/{Plant:D}?lang=sv");
+        Assert.Equal(HttpStatusCode.Unauthorized, expired.StatusCode);
+        Assert.Contains("Logga in", await expired.Content.ReadAsStringAsync());
+        Directory.CreateDirectory(System.IO.Path.Combine(AppContext.BaseDirectory, "preview"));
+        await File.WriteAllTextAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "preview", "signed-out.html"), html);
+    }
+
+    [Fact]
+    public async Task ManagementPages_ShowOrdersDetailsTranslationsAndEncodeUntrustedText()
+    {
+        using var created = await Create(_client, Guid.NewGuid(), Body.Replace("Synthetic planned order", "<script>alert(1)</script>"));
+        var order = await created.Content.ReadFromJsonAsync<JsonElement>();
+        var home = await _client.GetStringAsync("/management?lang=sv");
+        Assert.Contains("Inloggad", home);
+        Assert.Contains("Visa ordrar", home);
+        var list = await _client.GetStringAsync($"/management/orders/{Plant:D}?lang=sv");
+        Assert.Contains("ORD-000001", list);
+        Assert.Contains("Sparade ordrar", list);
+        var details = await _client.GetStringAsync($"/management/orders/{Plant:D}/{order.GetProperty("id").GetGuid():D}?lang=en");
+        Assert.Contains("Order details", details);
+        Assert.Contains("&lt;script&gt;", details);
+        Assert.DoesNotContain("<script>", details);
+        Assert.DoesNotContain(_subject, details);
+        using var denied = await _client.GetAsync($"/management/orders/{Guid.NewGuid():D}");
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        Directory.CreateDirectory(System.IO.Path.Combine(AppContext.BaseDirectory, "preview"));
+        await File.WriteAllTextAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "preview", "home.html"), home);
+        await File.WriteAllTextAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "preview", "orders.html"), list);
+        await File.WriteAllTextAsync(System.IO.Path.Combine(AppContext.BaseDirectory, "preview", "details.html"), details);
+    }
+
+    [Fact]
+    public async Task ManagementPages_SignOutRequiresCsrfAndReturnsHome()
+    {
+        _client.DefaultRequestHeaders.Remove("X-Management-CSRF");
+        using var rejected = await _client.PostAsync("/management/sign-out", new FormUrlEncodedContent([]));
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        var html = await _client.GetStringAsync("/management");
+        var token = System.Text.RegularExpressions.Regex.Match(html, "name='([^']+)' value='([^']+)'");
+        Assert.True(token.Success);
+        using var signedOut = await _client.PostAsync("/management/sign-out", new FormUrlEncodedContent(new Dictionary<string, string>
+        { [token.Groups[1].Value] = WebUtility.HtmlDecode(token.Groups[2].Value) }));
+        Assert.Equal(HttpStatusCode.Redirect, signedOut.StatusCode);
+        Assert.Equal("/management", signedOut.Headers.Location!.OriginalString);
+        Assert.Contains(signedOut.Headers.GetValues("Set-Cookie"), value => value.StartsWith("__Host-laundry-management=;", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task List_EmptyAndSingleOrderArePublicReadOnlyPages()
+    {
+        var empty = await _client.GetFromJsonAsync<JsonElement>(Path);
+        Assert.Empty(empty.GetProperty("items").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, empty.GetProperty("nextCursor").ValueKind);
+        using var created = await Create(_client, Guid.NewGuid());
+        _client.DefaultRequestHeaders.Remove("X-Management-CSRF");
+        using var response = await _client.GetAsync(Path);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("no-store", response.Headers.CacheControl!.ToString());
+        var page = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var item = Assert.Single(page.GetProperty("items").EnumerateArray());
+        Assert.Equal(12, item.EnumerateObject().Count());
+        Assert.DoesNotContain(_subject, page.GetRawText());
+        Assert.Equal(JsonValueKind.Null, page.GetProperty("nextCursor").ValueKind);
+        await using var db = new OrderDbContext(_orders);
+        Assert.Equal(1, await db.AuditEntries.CountAsync());
+        Assert.Equal(1, await db.CommandReceipts.CountAsync());
+        Assert.Equal(1, (await db.NumberCounters.SingleAsync()).LastNumber);
+    }
+
+    [Fact]
+    public async Task List_DefaultPageIsBoundedAndMaximumLimitIsAccepted()
+    {
+        for (var index = 0; index < 26; index++)
+        {
+            using var created = await Create(_client, Guid.NewGuid());
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        }
+        var first = await _client.GetFromJsonAsync<JsonElement>(Path);
+        Assert.Equal(25, first.GetProperty("items").GetArrayLength());
+        var token = Uri.EscapeDataString(first.GetProperty("nextCursor").GetString()!);
+        var last = await _client.GetFromJsonAsync<JsonElement>(Path + "?cursor=" + token);
+        Assert.Single(last.GetProperty("items").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, last.GetProperty("nextCursor").ValueKind);
+        var maximum = await _client.GetFromJsonAsync<JsonElement>(Path + "?limit=100");
+        Assert.Equal(26, maximum.GetProperty("items").GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, maximum.GetProperty("nextCursor").ValueKind);
+    }
+
+    [Fact]
+    public async Task List_PagesHaveStableDateIdOrderingAndNoDuplicates()
+    {
+        foreach (var date in new[] { "2030-01-02", "2030-01-01", "2030-01-01" })
+        {
+            using var created = await Create(_client, Guid.NewGuid(), Body.Replace("2030-01-01", date));
+            Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        }
+        await using var db = new OrderDbContext(_orders);
+        var expected = await db.Orders.OrderBy(x => x.PlannedReceivingDate).ThenBy(x => x.Id).Select(x => x.Id).ToArrayAsync();
+        var found = new List<Guid>();
+        string? path = Path + "?limit=1";
+        while (path is not null)
+        {
+            var page = await _client.GetFromJsonAsync<JsonElement>(path);
+            found.Add(Assert.Single(page.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
+            var cursor = page.GetProperty("nextCursor").GetString();
+            path = cursor is null ? null : Path + "?limit=1&cursor=" + Uri.EscapeDataString(cursor);
+            Assert.True(found.Count <= 3);
+        }
+        Assert.Equal(expected, found);
+        var first = await _client.GetFromJsonAsync<JsonElement>(Path + "?limit=1");
+        var token = Uri.EscapeDataString(first.GetProperty("nextCursor").GetString()!);
+        var raw = first.GetProperty("nextCursor").GetString()!;
+        var tampered = raw[..20] + (raw[20] == 'A' ? "B" : "A") + raw[21..];
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync(Path + "?limit=1&cursor=" + Uri.EscapeDataString(tampered))).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync(Path + "?limit=2&cursor=" + token)).StatusCode);
+        // Cursor is scoped to its original tenant, even with a valid grant for the new tenant.
+        await using var members = new ManagementAccessDbContext(_members);
+        await members.Database.ExecuteSqlRawAsync("UPDATE identity_access.plant_memberships SET tenant_id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'");
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync(Path + "?limit=1&cursor=" + token)).StatusCode);
+        var otherTenant = await _client.GetFromJsonAsync<JsonElement>(Path);
+        Assert.Empty(otherTenant.GetProperty("items").EnumerateArray());
+        var otherPlant = Guid.NewGuid();
+        await members.Database.ExecuteSqlInterpolatedAsync($"UPDATE identity_access.plant_memberships SET tenant_id = {Tenant}, plant_id = {otherPlant}");
+        var otherPath = $"/api/v1/plants/{otherPlant:D}/orders";
+        Assert.Empty((await _client.GetFromJsonAsync<JsonElement>(otherPath)).GetProperty("items").EnumerateArray());
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.GetAsync(otherPath + "?limit=1&cursor=" + token)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync(Path)).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("?limit=0")]
+    [InlineData("?limit=101")]
+    [InlineData("?limit=abc")]
+    [InlineData("?limit=1&limit=2")]
+    [InlineData("?cursor=invalid")]
+    [InlineData("?cursor=")]
+    [InlineData("?customerId=unsupported")]
+    public async Task List_InvalidOrUnsupportedQueriesAreRejected(string query)
+    {
+        using var response = await _client.GetAsync(Path + query);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_order_query", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Details_FollowsLocationWithoutCsrfAndExposesOnlyPublicFieldsWithoutWrites()
     {
         using var created = await Create(_client, Guid.NewGuid());
@@ -133,8 +288,10 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         await using var db = new ManagementAccessDbContext(_members);
         await db.Database.ExecuteSqlRawAsync("DELETE FROM identity_access.plant_membership_permissions WHERE permission <> 'orders.read'");
         Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync(created.Headers.Location)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync(Path)).StatusCode);
         await db.Database.ExecuteSqlRawAsync("DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.read'");
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync(created.Headers.Location)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync(Path)).StatusCode);
     }
 
     [Fact]
@@ -144,6 +301,7 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         await using var db = new ManagementAccessDbContext(_members);
         await db.Database.ExecuteSqlRawAsync("DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.read'");
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync(created.Headers.Location)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync(Path)).StatusCode);
     }
 
     [Fact]
@@ -153,6 +311,7 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         await using var db = new CustomerDbContext(_customers);
         await db.Database.ExecuteSqlRawAsync("UPDATE customers.laundry_customers SET is_active = false");
         Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync(created.Headers.Location)).StatusCode);
+        Assert.Single((await _client.GetFromJsonAsync<JsonElement>(Path)).GetProperty("items").EnumerateArray());
     }
 
     [Fact]
@@ -176,6 +335,7 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         using var failed = await _client.GetAsync(created.Headers.Location);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, failed.StatusCode);
         Assert.Contains("order_storage_unavailable", await failed.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await _client.GetAsync(Path)).StatusCode);
         await _postgres.StartAsync();
         // Docker may assign a new random host port; future request scopes use that endpoint.
         _app.Services.GetRequiredService<IConfiguration>()["ConnectionStrings:Laundry"] = _postgres.GetConnectionString();
@@ -278,12 +438,14 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         using var anonymous = Client(_app);
         using var response = await Create(anonymous, Guid.NewGuid());
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Path)).StatusCode);
         var gateway = new JwtSecurityToken(ManagementAccessStore.DevelopmentIssuer, "laundry-cloud-api",
             [new Claim("sub", _subject), new Claim("client_id", "gateway-development"), new Claim("laundry_permissions", "orders.create")],
             DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(5), new SigningCredentials(GatewayTestKey, SecurityAlgorithms.HmacSha256));
         anonymous.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(gateway));
         Assert.Equal(HttpStatusCode.Unauthorized, (await Create(anonymous, Guid.NewGuid())).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Path)).StatusCode);
         using var wrongPlant = await Create(_client, Guid.NewGuid(), path: $"/api/v1/plants/{Guid.NewGuid():D}/orders");
         Assert.Equal(HttpStatusCode.Forbidden, wrongPlant.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync($"/api/v1/plants/{Guid.NewGuid():D}/orders/{Guid.NewGuid():D}")).StatusCode);
@@ -310,6 +472,7 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Contains("plant_scope_ambiguous", await response.Content.ReadAsStringAsync());
         Assert.Equal(HttpStatusCode.Conflict, (await _client.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.GetAsync(Path)).StatusCode);
         await using var orders = new OrderDbContext(_orders);
         Assert.Equal(0, await orders.Orders.CountAsync());
     }
@@ -377,6 +540,7 @@ public sealed class OrderCreateEndpointTests : IAsyncLifetime
         using var response = await Create(client, Guid.NewGuid());
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(status, (int)(await client.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
+        Assert.Equal(status, (int)(await client.GetAsync(Path)).StatusCode);
     }
 
     [Fact]

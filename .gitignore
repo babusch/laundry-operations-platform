@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+demo-users.txt
 
 # Operating systems and editors
 .DS_Store

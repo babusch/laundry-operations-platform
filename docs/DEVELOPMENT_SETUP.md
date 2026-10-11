@@ -1,5 +1,7 @@
 # Development setup
 
+For one bookmarked entry point to sign in and view saved orders, see [Development management navigation](MANAGEMENT_NAVIGATION_SETUP.md). The existing `Start-DevelopmentManagement.ps1 -WithOrders` command now also serves this convenience page.
+
 This guide describes the supported local development environment. Keep it updated whenever a required tool or the primary setup commands change.
 
 ## What each tool does

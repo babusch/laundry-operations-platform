@@ -185,7 +185,7 @@ public static class ManagementAuthentication
             {
                 await http.ChallengeAsync(OidcScheme, new AuthenticationProperties
                 {
-                    RedirectUri = "/management/session",
+                    RedirectUri = http.Request.Query["home"] == "true" ? "/management" : "/management/session",
                     IsPersistent = false,
                     AllowRefresh = false
                 });

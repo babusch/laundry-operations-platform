@@ -11,7 +11,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List saved orders in the authorized plant
+         * @description Requires current orders.read and exactly one active tenant assignment for the URL plant. Ascending planned receiving date then ID. Protected cursor is bound to tenant, plant, limit and unfiltered query version. Keep the limit unchanged on continuation. No frozen snapshot across edits/inserts is promised. No filters yet; unknown/duplicate query parameters are rejected. No CSRF or idempotency key required. Responses are no-store and make no writes.
+         */
+        get: operations["listPlannedOrders"];
         put?: never;
         /**
          * Durably create one planned order
@@ -48,6 +52,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OrderList: {
+            items: components["schemas"]["Order"][];
+            /** @description Protected continuation token, or null on the last page. */
+            nextCursor: string | null;
+        };
         CreateOrder: {
             /** Format: uuid */
             customerId: string;
@@ -102,6 +111,78 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listPlannedOrders: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Pass nextCursor unchanged and URL-encoded; restart from page one if invalid. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                plantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public current plans, including orders for deactivated customers. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderList"];
+                };
+            };
+            /** @description Invalid/unsupported query or cursor; invalid_order_query. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Human management session required; gateway credentials cannot list orders. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current permission/scope denied or transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature disabled or outside Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ambiguous tenant scope for this plant. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Storage unavailable; read can safely be retried. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     createPlannedOrder: {
         parameters: {
             query?: never;

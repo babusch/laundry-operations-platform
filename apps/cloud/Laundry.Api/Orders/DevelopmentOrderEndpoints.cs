@@ -7,6 +7,7 @@ using Laundry.Api.Security;
 using Laundry.Api.Security.ManagementAccess;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
 namespace Laundry.Api.Orders;
@@ -46,6 +47,50 @@ public static class DevelopmentOrderEndpoints
     public static void MapDevelopmentOrderPlanning(this WebApplication app)
     {
         if (!Enabled(app.Configuration, app.Environment)) return;
+        app.MapGet("/api/v1/plants/{plantId:guid}/orders", async (Guid plantId, HttpContext http,
+            ManagementAccessStore memberships, DbContextOptions<OrderDbContext> orderOptions,
+            DbContextOptions<ManagementAccessDbContext> membershipOptions, DbContextOptions<CustomerDbContext> customerOptions,
+            IDataProtectionProvider protection, TimeProvider clock, CancellationToken ct) =>
+        {
+            var session = await http.AuthenticateAsync(ManagementAuthentication.CookieScheme);
+            if (!ManagementSessionAccess.TryReadActor(session, app.Configuration["ManagementAuthentication:Authority"]!.TrimEnd('/'), out var actor))
+                return Error(http, 401, "management_session_required");
+            try
+            {
+                var assignments = (await memberships.ReadAssignmentsAsync(actor!, ct)).Where(x => x.PlantId == plantId).ToArray();
+                if (assignments.Length == 0) return Error(http, 403, "access_denied");
+                if (assignments.Length != 1) return Error(http, 409, "plant_scope_ambiguous");
+                if (!assignments[0].Permissions.Contains(OrderPlanningPermissions.Read, StringComparer.Ordinal))
+                    return Error(http, 403, "access_denied");
+                var scope = new OrderPlanningScope(assignments[0].TenantId, plantId, actor!.Issuer, actor.Subject);
+                var query = http.Request.Query;
+                var limit = 25;
+                if (query.Keys.Any(x => x is not ("limit" or "cursor")) ||
+                    (query.ContainsKey("limit") && (query["limit"].Count != 1 ||
+                    !int.TryParse(query["limit"][0], NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > 100)))
+                    return Error(http, 400, "invalid_order_query");
+                var protector = protection.CreateProtector("Laundry.Orders.ListCursor.v1");
+                OrderListCursor? cursor = null;
+                if (query.ContainsKey("cursor") && (query["cursor"].Count != 1 ||
+                    !OrderListCursor.TryRead(protector, query["cursor"][0] ?? "", scope, limit, out cursor)))
+                    return Error(http, 400, "invalid_order_query");
+                var access = new SessionOrderPlanningAccess(actor, membershipOptions, customerOptions);
+                var rows = await new OrderPlanningStore(orderOptions, access, clock)
+                    .ListAsync(scope, limit, cursor?.ReceivingDate, cursor?.OrderId, ct);
+                var items = rows.Take(limit).Select(OrderDetails.From).ToArray();
+                var next = rows.Length > limit
+                    ? new OrderListCursor(scope.TenantId, plantId, limit, items[^1].PlannedReceivingDate, items[^1].Id).Encode(protector)
+                    : null;
+                return Results.Ok(new OrderListPage(items, next));
+            }
+            catch (OrderPlanningException exception) { return Error(http, 403, exception.Code); }
+            catch (Exception exception) when (exception is DbException or TimeoutException ||
+                exception is InvalidOperationException { InnerException: DbException })
+            {
+                return Error(http, 503, "order_storage_unavailable");
+            }
+        }).RequireAuthorization(ManagementAuthentication.Policy).WithName("ListPlannedOrders");
+
         app.MapGet("/api/v1/plants/{plantId:guid}/orders/{orderId:guid}", async (Guid plantId, Guid orderId,
             HttpContext http, ManagementAccessStore memberships, DbContextOptions<OrderDbContext> orderOptions,
             DbContextOptions<ManagementAccessDbContext> membershipOptions, DbContextOptions<CustomerDbContext> customerOptions,

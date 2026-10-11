@@ -70,6 +70,7 @@ app.MapDevelopmentManagementSession();
 app.MapDevelopmentManagementAccess();
 app.MapDevelopmentCustomers();
 app.MapDevelopmentOrderPlanning();
+Laundry.Api.Management.DevelopmentManagementPages.MapDevelopmentManagementPages(app);
 
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanIngestion:Enabled"))
 {

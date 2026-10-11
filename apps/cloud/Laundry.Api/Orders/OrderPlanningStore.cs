@@ -31,6 +31,21 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
             x.TenantId == scope.TenantId && x.PlantId == scope.PlantId && x.Id == orderId, cancellationToken);
     }
 
+    public async Task<ServiceOrder[]> ListAsync(OrderPlanningScope scope, int limit,
+        DateOnly? afterDate = null, Guid? afterId = null, CancellationToken cancellationToken = default)
+    {
+        await AuthorizeAsync(scope, OrderPlanningPermissions.Read, cancellationToken);
+        if (limit is < 1 or > 100 || afterDate.HasValue != afterId.HasValue)
+            throw new OrderPlanningException("invalid_order_query");
+        await using var db = new OrderDbContext(options);
+        var query = db.Orders.AsNoTracking().Where(x => x.TenantId == scope.TenantId && x.PlantId == scope.PlantId);
+        if (afterDate.HasValue)
+            query = query.Where(x => x.PlannedReceivingDate > afterDate.Value ||
+                (x.PlannedReceivingDate == afterDate.Value && x.Id.CompareTo(afterId!.Value) > 0));
+        // One extra row determines continuation without a separate count query.
+        return await query.OrderBy(x => x.PlannedReceivingDate).ThenBy(x => x.Id).Take(limit + 1).ToArrayAsync(cancellationToken);
+    }
+
     private async Task<OrderPlanningReceipt> SaveAsync(OrderPlanningScope scope, Guid key, Guid? orderId,
         long? expectedVersion, OrderPlan input, CancellationToken ct)
     {

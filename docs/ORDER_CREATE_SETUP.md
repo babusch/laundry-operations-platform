@@ -5,11 +5,25 @@ Status: first create endpoint implemented and tested. On 2026-10-11 the user app
 
 ## Enabled actions
 
+The user has verified both list and detail JSON responses. For everyday browsing, use the new single [management navigation entry point](MANAGEMENT_NAVIGATION_SETUP.md) instead of keeping individual API URLs bookmarked. It provides readable existing-order views; creating/editing orders in the UI remains deferred.
+
 An authorized signed-in person can deliberately create a planned order for an eligible customer. The system supplies immutable order ID/number, tenant/plant attribution, authenticated creator, UTC timestamps, and version 1. Creation does not activate receiving, attach items, dispatch anything, or charge a customer.
 
-`POST /api/v1/plants/{plantId}/orders` creates an order. `GET /api/v1/plants/{plantId}/orders/{orderId}` now reads its current saved plan, so the creation response's `Location` can be followed. Listing, history, editing, activation, and completion endpoints remain unimplemented even though the storage supports some of those operations.
+`POST /api/v1/plants/{plantId}/orders` creates an order. `GET /api/v1/plants/{plantId}/orders/{orderId}` reads its current saved plan. `GET /api/v1/plants/{plantId}/orders` now lists saved plans. History, editing, activation, and completion endpoints remain unimplemented.
 
-## View the saved order (next small live check)
+## List saved orders (current small live check)
+
+The user verified the protected detail read of `ORD-000001`, matching its original ID, dates, status, version, and timestamps. Listing requires no migration or seed change. Stop the API with **Ctrl+C**, then run `.\deploy\local\Start-DevelopmentManagement.ps1 -WithOrders` from the repository root. Sign in if needed and open:
+
+```text
+https://localhost:7100/api/v1/plants/22222222-2222-4222-8222-222222222222/orders
+```
+
+Expected shape: `{ "items": [...], "nextCursor": null }`, including the demo order. This reads existing plans, never creates/activates orders, and excludes internal creator/editor identities. Current plant-scoped `orders.read` is required, not a gateway token, CSRF token, or idempotency key. Deactivated customers' orders remain visible.
+
+This first list has no filters. `limit` defaults to 25 and accepts 1–100. Orders sort ascending by planned receiving date then ID. If `nextCursor` is not null, pass it URL-encoded as `cursor`, keeping the same limit. Protected tokens bind tenant, plant, limit, and unfiltered query version. Changed scope/limit, malformed tokens, duplicate parameters, and unknown filters return 400 `invalid_order_query`. Tokens are not access grants: current membership/read permission is checked on every page. Data-protection key loss can invalidate a token; restart from page one. Paging does not freeze records against concurrent edits/inserts. Empty pages have empty items and null cursor. Authorization, ambiguity, transport, and outage behavior match details. Live listing verification remains pending restart.
+
+## View the saved order (verified by the user)
 
 No new migration, seed, or order creation is needed. Stop the API terminal with **Ctrl+C**, then restart from the repository root:
 
@@ -19,7 +33,7 @@ No new migration, seed, or order creation is needed. Stop the API terminal with 
 
 Sign in through `https://localhost:7100/management/login` if needed. Open the saved creation response's `Location` under `https://localhost:7100`. It should return HTTP 200 and the saved order JSON, not a management UI yet. The already created demo order should retain its ID, `ORD-000001`, dates, and version 1.
 
-Reads require current `orders.read` permission for the resolved tenant/plant, but no CSRF token or idempotency key. They expose the same public fields as creation and the current ETag, never internal creator/editor identities. Deactivated customers do not hide existing order history. Unknown and out-of-scope orders return `order_not_found` (404) after authorization; unauthorized plants return 403, ambiguous tenant scope 409, and storage outages a safe 503. Every response is `no-store`; conditional GET is not implemented. Reading never changes the order, audit, receipt, or number counter. Live browser viewing still needs verification after restart.
+Reads require current `orders.read` permission for the resolved tenant/plant, but no CSRF token or idempotency key. They expose the same public fields as creation and the current ETag, never internal creator/editor identities. Deactivated customers do not hide existing order history. Unknown and out-of-scope orders return `order_not_found` (404) after authorization; unauthorized plants return 403, ambiguous tenant scope 409, and storage outages a safe 503. Every response is `no-store`; conditional GET is not implemented. Reading never changes the order, audit, receipt, or number counter. The user verified this detail response; listing is the pending live check.
 
 Management-cookie identity remains separate from gateway/source credentials. The caller cannot supply tenant, actor, station, status, order number, or audit fields. Unknown and duplicate JSON properties are rejected. Tenant is derived from exactly one current active assignment for the URL's plant; no assignment denies access, and multiple tenant assignments for the same plant return `plant_scope_ambiguous` instead of guessing. A production tenant/plant catalog remains a separate prerequisite.
 
@@ -113,6 +127,6 @@ To intentionally demonstrate another order only after the previous outcome is co
 
 Tests cover durable creation with trusted actor audit, concurrent/uncertain-acknowledgement retries, changed payload conflicts, permission removal, eligibility deactivation, historical receipts, invalid/duplicate/unknown fields, dates/limits, CSRF, valid gateway rejection, transport/environment gates, ambiguous tenant scope, transactional rollback, and actual row-lock conflicts until commit. The real OpenID Connect cookie regression also creates an order after customer/membership lookup.
 
-Latest detail verification: the full .NET run passed 326 tests (192 cloud, 133 gateway, one cross-component). After adding the current-plan-versus-historical-acknowledgement case and expanding real-login detail checks, all 33 final focused order/login cases pass. Detail coverage includes safe field projection, no writes, read-only access, immediate read-permission revocation, denied create-only access, scoped not-found, deactivated-customer history, storage outage/recovery, and the existing authentication/transport/ambiguity guards. All 25 station tests, 20 scan-contract tests, client/station type checks, generated-client regeneration, focused formatting, and diff checks pass. Previously verified helper cases were not rerun for this API-only slice. No real order has been created by these tests; databases/output folders are isolated. Live detail viewing remains pending the user's restart/check.
+Latest list verification: `dotnet test LaundryOperations.sln --no-restore -p:OutputPath=bin/OrderListVerification/` passes all 337 tests (203 cloud, 133 gateway, one cross-component). New list coverage includes empty/default/max pages, tied-date stable ordering, continuation without duplicates, tampered/invalid/wrong-scope/changed-limit cursors, tenant/plant isolation, and real OIDC-session listing. Existing read-access, revocation, deactivated-customer, machine rejection, ambiguity, transport, and outage tests also exercise listing. Order OpenAPI regeneration, `corepack pnpm test:station` (25 tests and client/station type checks), `corepack pnpm test:contracts` (20 tests), focused `dotnet format --verify-no-changes`, and `git diff --check` pass. Helper cases were not rerun because no startup helper changed. Databases/output folders are isolated; no real order or private environment file was inspected/changed. Live details are verified; live listing remains pending.
 
-Migration/startup helpers are tested with synthetic mocked commands on Windows PowerShell 5.1 and PowerShell 7. The user has applied the live migration and verified creation/retry; the agent has not created a live order. The next live check is following the saved order's detail link after restarting. Order list/detail/edit UI, receiving, dispatch, scheduling, completion, billing, offline operator authorization, and cloud-to-gateway order publication remain unimplemented.
+Migration/startup helpers are tested with synthetic mocked commands on Windows PowerShell 5.1 and PowerShell 7. The user has applied the live migration and verified creation/retry/details; the agent has not created a live order. The next live check is opening the plant order list after restarting. Order list/detail/edit UI, receiving, dispatch, scheduling, completion, billing, offline operator authorization, and cloud-to-gateway order publication remain unimplemented.

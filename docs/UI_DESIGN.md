@@ -95,6 +95,8 @@ The station PWA uses a dark, laundry-specific visual system. Deep blue-green sur
 
 ## Management and customer interfaces
 
+The first Development navigation bridge is served at `/management` by the existing API, using the same muted dark laundry tokens and Swedish/English support. It provides sign-in/status and read-only order navigation without changing the planned Next.js architecture. Use framed coral errors, amber setup warnings, system fonts, clear keyboard focus, stable control sizes and responsive spacing. This bridge uses document navigation rather than gesture/transition effects; visual verification remains pending as documented in [Management navigation setup](MANAGEMENT_NAVIGATION_SETUP.md).
+
 Administrative interfaces may use denser layouts than operator stations, but hierarchy, typography, keyboard operation, predictable placement, and visible system status remain mandatory. Translucent materials or depth effects are acceptable only when they preserve contrast, performance, and information density.
 
 ## UI completion checklist

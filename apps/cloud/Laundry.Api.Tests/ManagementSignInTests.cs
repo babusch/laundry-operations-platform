@@ -251,6 +251,8 @@ public sealed class ManagementSignInTests : IDisposable
         using var savedOrder = await client.GetAsync(createdOrder.Headers.Location);
         Assert.Equal(HttpStatusCode.OK, savedOrder.StatusCode);
         Assert.Equal(createdOrder.Headers.ETag, savedOrder.Headers.ETag);
+        var savedList = await client.GetFromJsonAsync<JsonElement>($"/api/v1/plants/{member.PlantId:D}/orders");
+        Assert.Single(savedList.GetProperty("items").EnumerateArray());
         Assert.Equal("synthetic-person", (await orderDatabase.Orders.SingleAsync()).CreatedBySubject);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{Guid.NewGuid():D}/plants/{member.PlantId:D}/customers")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{member.TenantId:D}/plants/{Guid.NewGuid():D}/customers")).StatusCode);
@@ -463,9 +465,20 @@ public sealed class ManagementSignInTests : IDisposable
     private static HttpClient Client(WebApplicationFactory<Program> app, string origin = "https://localhost:7100") =>
         app.CreateClient(new WebApplicationFactoryClientOptions { BaseAddress = new Uri(origin), AllowAutoRedirect = false });
 
-    private async Task<HttpResponseMessage> LoginAsync(HttpClient client)
+    [Theory]
+    [InlineData("/management/login?home=true&returnUrl=https://example.invalid", "/management")]
+    [InlineData("/management/login?returnUrl=https://example.invalid", "/management/session")]
+    public async Task LoginReturnTarget_IsFixedForNavigationPage(string path, string expected)
     {
-        using var login = await client.GetAsync("/management/login");
+        await using var app = Application();
+        using var client = Client(app);
+        using var callback = await LoginAsync(client, path);
+        Assert.Equal(expected, callback.Headers.Location!.OriginalString);
+    }
+
+    private async Task<HttpResponseMessage> LoginAsync(HttpClient client, string path = "/management/login")
+    {
+        using var login = await client.GetAsync(path);
         var query = QueryHelpers.ParseQuery(login.Headers.Location!.Query);
         var state = query.TryGetValue("state", out var stateValue) ? stateValue.ToString() : "";
         if (query.ContainsKey("request_uri"))
