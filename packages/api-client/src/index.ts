@@ -1,6 +1,13 @@
 export { createGatewayClient } from "./client";
 export type { GatewayClient, GatewayClientOptions } from "./client";
 export type { components, operations, paths } from "./generated/station-api";
+export { createOrderPlanningClient } from "./order-client";
+export type { OrderPlanningClient } from "./order-client";
+export type {
+  paths as OrderPlanningPaths,
+  components as OrderPlanningComponents,
+  operations as OrderPlanningOperations,
+} from "./generated/orders-api";
 
 import type { components } from "./generated/station-api";
 

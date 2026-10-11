@@ -73,7 +73,7 @@ After setup succeeds:
 .\deploy\local\Start-DevelopmentManagement.ps1 -WithAccess
 ```
 
-The helper still privately prompts for the application client secret and verifies it with Keycloak before starting. `-WithAccess` enables only the read-only assignment check; it does not enable order writes. The flag and all previous process settings are restored on exit. Without the flag, `/management/access` remains unavailable and existing login behavior is unchanged.
+The helper loads the saved `MANAGEMENT_CLIENT_SECRET` process/private `.env` setting or uses a hidden prompt when absent, then verifies it with Keycloak before starting. `-PromptForSecret` deliberately overrides saved values. See [secret setup](MANAGEMENT_SIGN_IN_SETUP.md#4-save-the-client-secret-once-and-start-the-cloud-api). `-WithAccess` enables only the read-only assignment check; it does not enable order writes. The flag and all previous process settings are restored on exit. Without the flag, `/management/access` remains unavailable and existing login behavior is unchanged.
 
 Sign in at `https://localhost:7100/management/login`, then open `https://localhost:7100/management/access`. Expect one assignment for the synthetic tenant/plant with the three approved permissions and `orderAccessEnabled: false`.
 

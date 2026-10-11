@@ -2,6 +2,8 @@
 
 This private workspace package provides the typed browser client for plant-gateway HTTP APIs.
 
+The separate management `createOrderPlanningClient` and `src/generated/orders-api.ts` describe opt-in planned-order creation and detail reads from `apps/cloud/Laundry.Api/Orders/OpenApi/orders.v1.yaml`. Its browser client defaults to same-origin credentials; mutations require a fresh management CSRF token and stable idempotency key explicitly. Detail reads require current `orders.read` but neither token nor key. Do not reuse station-source identity or the gateway client to manage orders. No management UI is implied by this client.
+
 `src/generated/station-api.ts` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. Do not edit the generated file directly. The OpenAPI document references the canonical `submit-scan.v2` JSON Schema so the request shape is not handwritten in the PWA.
 
 Regenerate and check the client from the repository root:

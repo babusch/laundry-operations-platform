@@ -36,6 +36,10 @@ Verify real login, sign-out, unauthenticated access, wrong scope, insufficient p
 
 ## Step 3: customer/plant eligibility and order routes (later)
 
+The first protected order-create endpoint and session-bound transactional access adapter are now implemented as an explicit opt-in Development slice. The verified login, application membership, and customer/service rules are combined during the durable write; callers cannot supply their own tenant/actor. Other order routes and production rollout remain pending. See [Order create setup](ORDER_CREATE_SETUP.md). Live migration/creation verification has not run yet.
+
+Customer sub-slice implemented: [Customer eligibility setup](CUSTOMER_ELIGIBILITY_SETUP.md) adds tenant-owned customer storage, explicit active plant-service eligibility, audited Development setup for one synthetic customer, and a permission-protected read-only choice preview. Live setup/browser verification remains pending. A session-bound order-access adapter and order mutations are not yet implemented; customer eligibility preview alone does not enable them.
+
 First reviewed sub-slice implemented: [Management access setup](MANAGEMENT_ACCESS_SETUP.md) defines application-owned membership/permission/audit storage, a verified management-cookie actor resolver, fresh scoped access reads, a separately enabled read-only assignment endpoint, and explicit Development provisioning for the demo account. Live migration/assignment is pending the user's setup command. No customer/tenant/plant catalog, order-access adapter, order endpoints, or permission administration UI is added in this slice.
 
 Introduce the smallest real plant/customer configuration and application-owned membership/grant storage. Implement `IOrderPlanningAccess` using the verified current human and current scoped grants, and check customer eligibility through its owning module. Re-evaluate access for first submissions and retries. These prerequisites must not be replaced with a permissive development fallback.

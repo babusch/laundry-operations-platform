@@ -7,7 +7,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "generate": "openapi-typescript ../../apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml -o src/generated/station-api.ts",
+    "generate": "pnpm run generate:station && pnpm run generate:orders",
+    "generate:station": "openapi-typescript ../../apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml -o src/generated/station-api.ts",
+    "generate:orders": "openapi-typescript ../../apps/cloud/Laundry.Api/Orders/OpenApi/orders.v1.yaml -o src/generated/orders-api.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

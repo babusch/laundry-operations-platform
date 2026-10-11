@@ -1,0 +1,243 @@
+openapi: 3.1.0
+info:
+  title: Development planned-order planning
+  version: 1.0.0
+  description: >-
+    Opt-in loopback HTTPS management proof. Creation and detail reads are implemented.
+    No production rollout, order editing/listing, receiving, or dispatch is implied.
+servers:
+  - url: https://localhost:7100
+paths:
+  /api/v1/plants/{plantId}/orders:
+    post:
+      operationId: createPlannedOrder
+      summary: Durably create one planned order
+      description: >-
+        Tenant and actor are derived from the verified management session and
+        current application membership. Exactly one active assignment must resolve
+        the plant to a tenant; ambiguous scope is rejected. Duplicate JSON fields
+        are rejected. Authorization and customer eligibility participate in the
+        order transaction. Retry the exact body/key under the same human identity
+        after an uncertain result. An authorized unchanged retry returns the
+        original 201 response; customer deactivation does not rewrite that receipt.
+        Location identifies the stored order and can be followed with orders.read permission.
+      security:
+        - managementSession: []
+          managementCsrf: []
+      parameters:
+        - name: plantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: One nonzero UUID in canonical dashed form, retained for retries.
+          schema:
+            type: string
+            format: uuid
+        - name: X-Management-CSRF
+          in: header
+          required: true
+          description: Same-session request token obtained from /management/antiforgery.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        description: Maximum encoded body size 16 KiB, including chunked bodies.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrder'
+      responses:
+        '201':
+          description: Order/audit/receipt durably committed, or unchanged authorized replay.
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Strong representation validator containing order ID and version.
+            Location:
+              schema:
+                type: string
+              description: Protected stored-order detail resource path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          description: Invalid request/key, invalid dates, ineligible customer, or missing/invalid CSRF token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: A valid management human session is required; gateway tokens cannot authorize this route.
+        '403':
+          description: Current permission/scope denied, or Development transport boundary rejected.
+        '404':
+          description: Feature disabled or outside Development.
+        '409':
+          description: Changed request reusing a key, or ambiguous tenant scope for this plant.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '413':
+          description: Encoded request exceeds 16 KiB.
+        '415':
+          description: Application/json required.
+        '503':
+          description: Storage unavailable or uncertain commit acknowledgement; retry exact body/key.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /api/v1/plants/{plantId}/orders/{orderId}:
+    get:
+      operationId: getPlannedOrder
+      summary: Read the current saved order plan
+      description: >-
+        Requires a verified management session and current orders.read permission.
+        Tenant is resolved from exactly one active assignment for the URL plant.
+        Unknown orders and orders outside that tenant/plant return the same 404.
+        Reads do not change orders, allocate numbers, or create command/audit records.
+        Customer deactivation does not hide historical orders. Returns the current
+        representation, not a historical creation acknowledgement. No CSRF token or
+        idempotency key is required; responses are no-store. Conditional GET is not implemented.
+      security:
+        - managementSession: []
+      parameters:
+        - name: plantId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current saved plan, excluding internal tenant and actor identity fields.
+          headers:
+            ETag:
+              description: Strong representation validator containing order ID and current version.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          description: Valid human management session required; gateway bearer credentials are insufficient.
+        '403':
+          description: Current permission/scope denied or Development transport boundary rejected.
+        '404':
+          description: Scoped order not found, feature disabled, or outside Development.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Ambiguous tenant scope for this plant.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '503':
+          description: Storage unavailable; read can be retried without creating an order.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  securitySchemes:
+    managementSession:
+      type: apiKey
+      in: cookie
+      name: __Host-laundry-management
+      description: Protected HttpOnly cookie established by management OpenID Connect login.
+    managementCsrf:
+      type: apiKey
+      in: header
+      name: X-Management-CSRF
+      description: Request token from /management/antiforgery with its same-session antiforgery cookie.
+  schemas:
+    CreateOrder:
+      type: object
+      additionalProperties: false
+      required: [customerId, plannedReceivingDate, plannedDeliveryDate]
+      properties:
+        customerId:
+          type: string
+          format: uuid
+        plannedReceivingDate:
+          type: string
+          format: date
+          description: Exact YYYY-MM-DD calendar date, future or past allowed.
+        plannedDeliveryDate:
+          type: string
+          format: date
+          description: Exact YYYY-MM-DD on or after receiving date; same-day allowed.
+        customerReference:
+          type: [string, 'null']
+          maxLength: 100
+        notes:
+          type: [string, 'null']
+          maxLength: 2000
+    Order:
+      type: object
+      additionalProperties: false
+      required: [id, plantId, orderNumber, customerId, plannedReceivingDate, plannedDeliveryDate, customerReference, notes, status, version, createdAtUtc, updatedAtUtc]
+      properties:
+        id:
+          type: string
+          format: uuid
+        plantId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+          format: uuid
+        plannedReceivingDate:
+          type: string
+          format: date
+        plannedDeliveryDate:
+          type: string
+          format: date
+        customerReference:
+          type: [string, 'null']
+        notes:
+          type: [string, 'null']
+        status:
+          type: string
+          enum: [planned]
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        createdAtUtc:
+          type: string
+          format: date-time
+        updatedAtUtc:
+          type: string
+          format: date-time
+    Problem:
+      type: object
+      properties:
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        correlationId:
+          type: string

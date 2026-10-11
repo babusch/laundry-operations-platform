@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
+using Laundry.Api.Orders;
 
 namespace Laundry.Api.Security.ManagementAccess;
 
@@ -47,7 +48,11 @@ public static class ManagementSessionAccess
             try
             {
                 var assignments = await store.ReadAssignmentsAsync(actor!, ct);
-                return Results.Ok(new { assignments, orderAccessEnabled = false });
+                return Results.Ok(new
+                {
+                    assignments,
+                    orderAccessEnabled = DevelopmentOrderEndpoints.Enabled(app.Configuration, app.Environment)
+                });
             }
             catch (Exception exception) when (exception is DbException or TimeoutException ||
                 exception is InvalidOperationException { InnerException: DbException })

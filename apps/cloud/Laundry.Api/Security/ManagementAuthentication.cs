@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
+using Laundry.Api.Orders;
 
 namespace Laundry.Api.Security;
 
@@ -207,7 +208,11 @@ public static class ManagementAuthentication
                 await http.Response.WriteAsJsonAsync(new { code = "management_identity_unavailable" });
             }
         }).AllowAnonymous();
-        app.MapGet("/management/session", () => Results.Ok(new { authenticated = true, orderAccessEnabled = false }))
+        app.MapGet("/management/session", () => Results.Ok(new
+        {
+            authenticated = true,
+            orderAccessEnabled = DevelopmentOrderEndpoints.Enabled(app.Configuration, app.Environment)
+        }))
             .RequireAuthorization(Policy);
         app.MapGet("/management/antiforgery", (HttpContext http, IAntiforgery antiforgery) =>
             Results.Ok(new { requestToken = antiforgery.GetAndStoreTokens(http).RequestToken, headerName = "X-Management-CSRF" }))

@@ -4,10 +4,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Laundry.Api.Orders;
 
-// Not registered with the HTTP application until human identity and customer eligibility exist.
+// HTTP composition must supply verified human access and current customer eligibility.
 // Each operation owns a fresh context so a rejected/failed transaction cannot contaminate a retry.
 public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
     IOrderPlanningAccess access, TimeProvider timeProvider)
@@ -52,6 +53,9 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
         var lockKey = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(Encoding.UTF8.GetBytes(
             $"order-planning:{scope.TenantId:D}:{scope.PlantId:D}")));
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", ct);
+        await using IAsyncDisposable? accessLease = access is ITransactionalOrderPlanningAccess transactionalAccess
+            ? await transactionalAccess.BindTransactionAsync(db.Database.GetDbConnection(), transaction.GetDbTransaction(), scope, ct)
+            : null;
         // Recheck after waiting for another writer, including before returning a saved receipt.
         await AuthorizeAsync(scope, orderId.HasValue ? OrderPlanningPermissions.EditPlan : OrderPlanningPermissions.Create, ct);
         var previous = await db.CommandReceipts.SingleOrDefaultAsync(x =>
@@ -163,22 +167,8 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
             RequestFingerprint = fingerprint,
             OrderId = order.Id,
             ResponseStatus = orderId.HasValue ? 200 : 201,
-            ResponseBody = JsonSerializer.Serialize(new
-            {
-                order.Id,
-                order.PlantId,
-                order.OrderNumber,
-                order.CustomerId,
-                order.PlannedReceivingDate,
-                order.PlannedDeliveryDate,
-                order.CustomerReference,
-                order.Notes,
-                order.Status,
-                order.Version,
-                order.CreatedAtUtc,
-                order.UpdatedAtUtc
-            }, JsonOptions),
-            ResponseEtag = $"\"{order.Id:D}:{order.Version.ToString(CultureInfo.InvariantCulture)}\"",
+            ResponseBody = JsonSerializer.Serialize(OrderDetails.From(order), JsonOptions),
+            ResponseEtag = OrderDetails.From(order).EntityTag(),
             ResponseLocation = $"/api/v1/plants/{scope.PlantId:D}/orders/{order.Id:D}",
             AcceptedAtUtc = now
         };

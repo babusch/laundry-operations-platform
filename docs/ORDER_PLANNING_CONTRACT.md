@@ -1,6 +1,7 @@
 # Order planning: proposed database and API contract
 
-Status: storage slice implemented; HTTP/API details remain proposed for review.
+Status: storage, protected creation, and protected detail-read slices implemented; other HTTP/API operations remain proposed.
+Implementation update (2026-10-11): protected creation and current detail reads are implemented. `POST /api/v1/plants/{plantId}/orders` is an opt-in Development-only human/CSRF-protected route with current plant permission and customer-service checks in the owning order transaction. `GET /api/v1/plants/{plantId}/orders/{orderId}` requires current `orders.read`, resolves tenant from the signed-in person's plant assignment, returns a public representation and ETag without audit identities, and makes no writes. Missing and other-scope orders return the same 404; deactivated customers remain readable. Other HTTP operations below remain proposed/unimplemented. The contract is in `Laundry.Api/Orders/OpenApi/orders.v1.yaml`, with generated TypeScript types/client in `packages/api-client`. See [Order create setup](ORDER_CREATE_SETUP.md) for setup and pending live detail verification.
 Date: 2026-10-04.
 
 Review update (2026-10-11): the user approved the planned-order editing rule: customer, planned receiving date, planned delivery date, customer reference, and notes may be changed while planned. Once receiving starts, this planning endpoint rejects edits; changes to active orders require separately reviewed rules. This approval does not finalize every technical detail below or authorize implementation of later workflows.
@@ -106,12 +107,13 @@ Paths above are relative to the base. Human authentication is required; gateway/
 ### Create example (entirely synthetic)
 
 ```http
-POST /api/v1/plants/11111111-1111-4111-8111-111111111111/orders
+POST /api/v1/plants/22222222-2222-4222-8222-222222222222/orders
 Content-Type: application/json
-Idempotency-Key: 33333333-3333-4333-8333-333333333333
+Idempotency-Key: 55555555-5555-4555-8555-555555555555
+X-Management-CSRF: <fresh same-session request token>
 
 {
-  "customerId": "22222222-2222-4222-8222-222222222222",
+  "customerId": "33333333-3333-4333-8333-333333333333",
   "plannedReceivingDate": "2026-10-12",
   "plannedDeliveryDate": "2026-10-14",
   "customerReference": "DEMO-REQUEST-01",
@@ -126,9 +128,9 @@ First success: `201 Created`, `Location` pointing to the order, and a strong `ET
 ```json
 {
   "id": "44444444-4444-4444-8444-444444444444",
-  "plantId": "11111111-1111-4111-8111-111111111111",
+  "plantId": "22222222-2222-4222-8222-222222222222",
   "orderNumber": "ORD-000001",
-  "customerId": "22222222-2222-4222-8222-222222222222",
+  "customerId": "33333333-3333-4333-8333-333333333333",
   "plannedReceivingDate": "2026-10-12",
   "plannedDeliveryDate": "2026-10-14",
   "customerReference": "DEMO-REQUEST-01",
@@ -181,13 +183,13 @@ Do not add receiving/dispatch item rows, quantities, prices, schedules, automati
 
 ## Storage implementation boundary (2026-10-11)
 
-- The user authorized the storage-and-tests slice. Implementation is under `apps/cloud/Laundry.Api/Orders`, with a separate `OrderDbContext` and migration history table. It includes creation, scoped detail lookup, planned-only update, attributed audits, durable retry receipts, and numbering. It does not register services or routes in `Program.cs` or alter raw scan contracts. HTTP routes, list/history pagination, generated clients, and UI remain unimplemented.
+- The user authorized storage/tests, protected creation, and the subsequent read-only detail slice. Implementation is under `apps/cloud/Laundry.Api/Orders`, with a separate `OrderDbContext` and migration history table. It includes creation, scoped detail lookup, planned-only update, attributed audits, durable retry receipts, and numbering. The opt-in host registers protected POST creation and GET detail routes with generated OpenAPI client support. It does not alter raw scan contracts. HTTP list/history/edit routes, pagination, and UI remain unimplemented.
 - An additional `orders.number_counters` table holds `(tenant_id, plant_id, last_number)`. Planning writes currently acquire a transaction-bound per-plant PostgreSQL advisory lock. This favors correctness over parallel write throughput in the small first slice. Scope predicates still enforce isolation; hash collisions only serialize more work. Updates also lock the target row and use version/status concurrency tokens, anticipating future lifecycle writers.
 - The order, optional change-history entry, number allocation, and successful receipt commit together. No-change saves retain a receipt without incrementing version or adding a change entry. Stored receipts are returned unchanged on retries, including after later edits.
 - Audit/receipt SQL update, delete, and truncate are rejected by migration-installed triggers. This is application/database protection, not tamper-proofing against privileged database administrators.
-- `IOrderPlanningAccess` is a required server-side seam for permission and customer eligibility, with no permissive production implementation. Tests implement it with synthetic allowed scope/customers. No tenant/plant/customer master tables or foreign keys to nonexistent modules are invented; only audit/receipt-to-order foreign keys are implemented. Real customer/plant validation and verified-human scope construction remain prerequisites before enabling routes.
+- `IOrderPlanningAccess` is a required server-side seam. The real session-bound adapter now joins membership/customer checks to the order transaction and holds the relevant rows until completion; fake access remains only in isolated storage tests. Customer/service records and application memberships are implemented separately. No foreign keys to nonexistent tenant/plant catalog modules are invented, and no persistence entities are shared with clients. Production catalog integration/administration still needs review.
 - The migration permits only `planned`. Receiving activation is intentionally not implemented; non-planned edit rejection exists in the store, but real lifecycle race tests require that later slice and its migration.
-- Migration generation needs no secrets. Existing scan migration commands now explicitly choose `ScanDbContext`. The order migration was applied only to disposable test databases, not the user's Compose database.
+- Migration generation needs no secrets. Existing scan migration commands now explicitly choose `ScanDbContext`. The user explicitly applied the order migration to the Development Compose database and verified creation/retry. Detail reads introduce no schema changes.
 - All PostgreSQL tests use synthetic data; no private environment files are inspected. No external package or new service was introduced.
 
-Implementation continues in small reviewed slices; the next boundary is real human authorization and customer/plant eligibility before management writes can be exposed.
+Implementation continues in small reviewed slices. Real Development sign-in, scoped permission/customer eligibility, and creation/retry are verified; the next live check is the protected saved-order detail read. Later endpoints/UI require separate small steps.

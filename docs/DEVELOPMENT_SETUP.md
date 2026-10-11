@@ -262,6 +262,10 @@ Stop the API with **Ctrl+C**, and stop the development database with `docker com
 
 ## Repository-local .NET tools
 
+For the first protected planned-order create endpoint, follow [Order create setup](ORDER_CREATE_SETUP.md). The order migration remains explicit via `OrderDbContext`; `-WithOrders` enables only this reviewed creation slice plus its access/customer prerequisites. It does not enable receiving, dispatch, or generic order status updates.
+
+Customer records and plant-service eligibility have a separate `CustomerDbContext`; follow [Customer eligibility setup](CUSTOMER_ELIGIBILITY_SETUP.md) for its explicit migration, synthetic setup, and `-WithCustomers` read-only check. No initializer runs automatically at application startup.
+
 The explicit demo-account company/plant assignment uses a separate `ManagementAccessDbContext`; follow [Management access setup](MANAGEMENT_ACCESS_SETUP.md) before enabling its read-only check. Always name the database context when running cloud migrations; this slice does not change scan/order schema ownership or enable order writes.
 
 For the separate, disabled-by-default management login proof, follow [Management sign-in setup](MANAGEMENT_SIGN_IN_SETUP.md). It uses a distinct Keycloak client and hidden-prompt startup helper; the normal API startup does not enable it. No order writes are exposed.

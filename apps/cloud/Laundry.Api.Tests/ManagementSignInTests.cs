@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Laundry.Api.Security;
 using Laundry.Api.Security.ManagementAccess;
+using Laundry.Api.Customers;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -172,7 +173,7 @@ public sealed class ManagementSignInTests : IDisposable
 
     [Fact]
     [Trait("Category", "Database")]
-    public async Task RealLoginCookie_CanReadItsApplicationOwnedAssignment()
+    public async Task RealLoginCookie_CanReadItsAssignmentAndEligibleCustomers()
     {
         await using var postgres = new PostgreSqlBuilder("postgres:18.6-alpine3.23").Build();
         await postgres.StartAsync();
@@ -204,7 +205,16 @@ public sealed class ManagementSignInTests : IDisposable
             AfterState = "{}"
         });
         await database.SaveChangesAsync();
-        await using var app = Application(accessConnection: postgres.GetConnectionString());
+        var customerOptions = new DbContextOptionsBuilder<CustomerDbContext>().UseNpgsql(postgres.GetConnectionString(),
+            provider => provider.MigrationsHistoryTable("__customer_migrations", "customers")).Options;
+        await using var customerDatabase = new CustomerDbContext(customerOptions);
+        await customerDatabase.Database.MigrateAsync();
+        await new CustomerStore(customerDatabase).InitializeDevelopmentAsync(member.TenantId, member.PlantId);
+        var orderOptions = new DbContextOptionsBuilder<Laundry.Api.Orders.OrderDbContext>().UseNpgsql(postgres.GetConnectionString(),
+            provider => provider.MigrationsHistoryTable("__order_migrations_history", "orders")).Options;
+        await using var orderDatabase = new Laundry.Api.Orders.OrderDbContext(orderOptions);
+        await orderDatabase.Database.MigrateAsync();
+        await using var app = Application(accessConnection: postgres.GetConnectionString(), customersEnabled: true, ordersEnabled: true);
         using var client = Client(app);
         using var callback = await LoginAsync(client);
         Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
@@ -214,7 +224,59 @@ public sealed class ManagementSignInTests : IDisposable
         var assignment = Assert.Single(json.RootElement.GetProperty("assignments").EnumerateArray());
         Assert.Equal(ManagementAccessStore.DevelopmentPlant, assignment.GetProperty("plantId").GetGuid());
         Assert.Equal(3, assignment.GetProperty("permissions").GetArrayLength());
-        Assert.False(json.RootElement.GetProperty("orderAccessEnabled").GetBoolean());
+        Assert.True(json.RootElement.GetProperty("orderAccessEnabled").GetBoolean());
+        var customerPath = $"/management/tenants/{member.TenantId:D}/plants/{member.PlantId:D}/customers";
+        using var choices = await client.GetAsync(customerPath);
+        Assert.Equal(HttpStatusCode.OK, choices.StatusCode);
+        using var choiceJson = JsonDocument.Parse(await choices.Content.ReadAsStringAsync());
+        var choice = Assert.Single(choiceJson.RootElement.GetProperty("customers").EnumerateArray());
+        Assert.Equal(CustomerStore.DevelopmentCustomer, choice.GetProperty("id").GetGuid());
+        Assert.Equal("Demo laundry customer", choice.GetProperty("displayName").GetString());
+        Assert.False(choiceJson.RootElement.GetProperty("truncated").GetBoolean());
+        Assert.True(choiceJson.RootElement.GetProperty("orderAccessEnabled").GetBoolean());
+        var csrf = await client.GetFromJsonAsync<JsonElement>("/management/antiforgery");
+        client.DefaultRequestHeaders.Add("X-Management-CSRF", csrf.GetProperty("requestToken").GetString());
+        using var orderRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/plants/{member.PlantId:D}/orders")
+        {
+            Content = JsonContent.Create(new
+            {
+                customerId = CustomerStore.DevelopmentCustomer,
+                plannedReceivingDate = "2030-01-01",
+                plannedDeliveryDate = "2030-01-03"
+            })
+        };
+        orderRequest.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        using var createdOrder = await client.SendAsync(orderRequest);
+        Assert.Equal(HttpStatusCode.Created, createdOrder.StatusCode);
+        using var savedOrder = await client.GetAsync(createdOrder.Headers.Location);
+        Assert.Equal(HttpStatusCode.OK, savedOrder.StatusCode);
+        Assert.Equal(createdOrder.Headers.ETag, savedOrder.Headers.ETag);
+        Assert.Equal("synthetic-person", (await orderDatabase.Orders.SingleAsync()).CreatedBySubject);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{Guid.NewGuid():D}/plants/{member.PlantId:D}/customers")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{member.TenantId:D}/plants/{Guid.NewGuid():D}/customers")).StatusCode);
+        await database.Database.ExecuteSqlRawAsync("DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.read'");
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(customerPath)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(createdOrder.Headers.Location)).StatusCode);
+        using var anonymous = Client(app);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(customerPath)).StatusCode);
+        await database.Database.ExecuteSqlRawAsync("INSERT INTO identity_access.plant_membership_permissions (membership_id, permission) SELECT id, 'orders.read' FROM identity_access.plant_memberships");
+        await customerDatabase.Database.ExecuteSqlRawAsync("ALTER TABLE customers.laundry_customers RENAME TO temporarily_unavailable_customers");
+        try
+        {
+            using var unavailable = await client.GetAsync(customerPath);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, unavailable.StatusCode);
+            Assert.Contains("customer_lookup_unavailable", await unavailable.Content.ReadAsStringAsync());
+        }
+        finally
+        {
+            await customerDatabase.Database.ExecuteSqlRawAsync("ALTER TABLE customers.temporarily_unavailable_customers RENAME TO laundry_customers");
+        }
+        await using var disabled = Application(accessConnection: postgres.GetConnectionString());
+        using var disabledClient = Client(disabled);
+        Assert.Equal(HttpStatusCode.NotFound, (await disabledClient.GetAsync(customerPath)).StatusCode);
+        await using var production = Application(environment: "Production", accessConnection: postgres.GetConnectionString(), customersEnabled: true);
+        using var productionClient = Client(production);
+        Assert.Equal(HttpStatusCode.NotFound, (await productionClient.GetAsync(customerPath)).StatusCode);
     }
 
     [Fact]
@@ -357,7 +419,7 @@ public sealed class ManagementSignInTests : IDisposable
 
     private WebApplicationFactory<Program> Application(string environment = "Development", bool enabled = true,
         string remoteAddress = "127.0.0.1", bool unavailable = false, string secret = "synthetic-client-secret", bool usePar = false,
-        string? accessConnection = null) =>
+        string? accessConnection = null, bool customersEnabled = false, bool ordersEnabled = false) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
@@ -366,6 +428,8 @@ public sealed class ManagementSignInTests : IDisposable
             builder.UseSetting("ManagementAuthentication:ClientId", ClientId);
             builder.UseSetting("ManagementAuthentication:ClientSecret", secret);
             builder.UseSetting("ManagementAccess:Enabled", (accessConnection is not null).ToString());
+            builder.UseSetting("Customers:Enabled", customersEnabled.ToString());
+            builder.UseSetting("OrderPlanning:Enabled", ordersEnabled.ToString());
             if (accessConnection is not null) builder.UseSetting("ConnectionStrings:Laundry", accessConnection);
             builder.ConfigureServices(services =>
             {

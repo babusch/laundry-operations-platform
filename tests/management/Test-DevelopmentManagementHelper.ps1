@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 # Synthetic-only script tests: no live network, passwords, private files, or server launch.
 $helperRepositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $helperPath = Join-Path $helperRepositoryRoot 'deploy/local/Start-DevelopmentManagement.ps1'
-$helperTestState = @{ Mode = 'accepted'; LaunchCount = 0; ProbeCount = 0; WithAccess = $false }
+$helperTestState = @{ Mode = 'accepted'; LaunchCount = 0; ProbeCount = 0; WithAccess = $false; WithCustomers = $false; WithOrders = $false }
 
 Add-Type -TypeDefinition @'
 public sealed class HelperTestResponse : System.Net.WebResponse {
@@ -51,11 +51,17 @@ function dotnet {
     if ([Environment]::GetEnvironmentVariable('ManagementAccess__Enabled', 'Process') -cne $helperTestState.WithAccess.ToString()) {
         throw 'Synthetic access opt-in assertion failed.'
     }
+    if ([Environment]::GetEnvironmentVariable('Customers__Enabled', 'Process') -cne $helperTestState.WithCustomers.ToString()) {
+        throw 'Synthetic customer opt-in assertion failed.'
+    }
+    if ([Environment]::GetEnvironmentVariable('OrderPlanning__Enabled', 'Process') -cne $helperTestState.WithOrders.ToString()) {
+        throw 'Synthetic order opt-in assertion failed.'
+    }
     $global:LASTEXITCODE = 0
 }
 
 $helperSettingNames = @('ManagementAuthentication__Enabled', 'ManagementAuthentication__ClientSecret',
-    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId', 'ManagementAccess__Enabled')
+    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId', 'ManagementAccess__Enabled', 'Customers__Enabled', 'OrderPlanning__Enabled')
 $helperOriginalSettings = @{}
 foreach ($settingName in $helperSettingNames) {
     $helperOriginalSettings[$settingName] = [Environment]::GetEnvironmentVariable($settingName, 'Process')
@@ -65,11 +71,17 @@ foreach ($settingName in $helperSettingNames) {
     [Environment]::SetEnvironmentVariable($settingName, 'synthetic-baseline', 'Process')
 }
 
-& $helperPath *> $null
+& $helperPath -PromptForSecret *> $null
 if ($helperTestState.LaunchCount -ne 1) { throw 'Accepted helper flow did not launch once.' }
 $helperTestState.WithAccess = $true
-& $helperPath -WithAccess *> $null
+& $helperPath -WithAccess -PromptForSecret *> $null
 if ($helperTestState.LaunchCount -ne 2) { throw 'Explicit access opt-in did not launch once.' }
+$helperTestState.WithCustomers = $true
+& $helperPath -WithCustomers -PromptForSecret *> $null
+if ($helperTestState.LaunchCount -ne 3) { throw 'Customer opt-in did not enable access automatically.' }
+$helperTestState.WithOrders = $true
+& $helperPath -WithOrders -PromptForSecret *> $null
+if ($helperTestState.LaunchCount -ne 4) { throw 'Order opt-in did not enable prerequisites automatically.' }
 foreach ($case in @(
     @{ Mode = 'rejected'; Expected = 'Keycloak did not accept*HTTP 400*' },
     @{ Mode = 'outage'; Expected = 'Could not verify*' },
@@ -78,16 +90,16 @@ foreach ($case in @(
 )) {
     $helperTestState.Mode = $case.Mode
     $matched = $false
-    try { & $helperPath *> $null } catch { $matched = $_.Exception.Message -like $case.Expected }
-    if (-not $matched -or $helperTestState.LaunchCount -ne 2) { throw ('Helper case failed: ' + $case.Mode) }
+    try { & $helperPath -PromptForSecret *> $null } catch { $matched = $_.Exception.Message -like $case.Expected }
+    if (-not $matched -or $helperTestState.LaunchCount -ne 4) { throw ('Helper case failed: ' + $case.Mode) }
     foreach ($settingName in $helperSettingNames) {
         if ([Environment]::GetEnvironmentVariable($settingName, 'Process') -cne 'synthetic-baseline') {
             throw 'Helper did not restore process settings.'
         }
     }
 }
-if ($helperTestState.ProbeCount -ne 4) { throw 'Unexpected preflight request count.' }
-Write-Output ('All six synthetic management-helper cases passed on PowerShell ' + $PSVersionTable.PSVersion.ToString())
+if ($helperTestState.ProbeCount -ne 6) { throw 'Unexpected preflight request count.' }
+Write-Output ('All eight synthetic management-helper cases passed on PowerShell ' + $PSVersionTable.PSVersion.ToString())
 } finally {
     foreach ($settingName in $helperSettingNames) {
         [Environment]::SetEnvironmentVariable($settingName, $helperOriginalSettings[$settingName], 'Process')

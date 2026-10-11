@@ -1,12 +1,33 @@
 using Laundry.Api.Integrations.Scans;
 using Laundry.Api.Security;
 using Laundry.Api.Security.ManagementAccess;
+using Laundry.Api.Customers;
+using Laundry.Api.Orders;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 
 const string managementBootstrapFlag = "--initialize-development-management-access";
+const string customerBootstrapFlag = "--initialize-development-customer";
 var initializeManagement = args.Contains(managementBootstrapFlag, StringComparer.Ordinal);
-var builder = WebApplication.CreateBuilder(args.Where(value => value != managementBootstrapFlag).ToArray());
+var initializeCustomer = args.Contains(customerBootstrapFlag, StringComparer.Ordinal);
+if (initializeManagement && initializeCustomer) throw new InvalidOperationException("Choose one Development setup command.");
+var builder = WebApplication.CreateBuilder(args.Where(value => value != managementBootstrapFlag && value != customerBootstrapFlag).ToArray());
+
+if (initializeCustomer)
+{
+    if (!builder.Environment.IsDevelopment()) throw new InvalidOperationException("Customer bootstrap is Development-only.");
+    var options = new DbContextOptionsBuilder<CustomerDbContext>().UseNpgsql(
+        builder.Configuration.GetConnectionString("Laundry"),
+        provider => provider.MigrationsHistoryTable("__customer_migrations", "customers")).Options;
+    await using var database = new CustomerDbContext(options);
+    if ((await database.Database.GetPendingMigrationsAsync()).Any())
+        throw new InvalidOperationException("Apply the customer migration explicitly before setup.");
+    var created = await new CustomerStore(database).InitializeDevelopmentAsync(
+        ManagementAccessStore.DevelopmentTenant, ManagementAccessStore.DevelopmentPlant);
+    Console.WriteLine(created ? "Development customer and plant-service eligibility created with audit history." :
+        "Development customer already exists; no changes made.");
+    return;
+}
 
 if (initializeManagement)
 {
@@ -31,6 +52,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGatewayAuthentication(builder.Configuration);
 builder.Services.AddDevelopmentManagementAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddDevelopmentManagementAccess(builder.Configuration, builder.Environment);
+builder.Services.AddDevelopmentCustomers(builder.Configuration, builder.Environment);
+builder.Services.AddDevelopmentOrderPlanning(builder.Configuration, builder.Environment);
 builder.Services.AddDbContext<ScanDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Laundry")
         ?? throw new InvalidOperationException("Configure ConnectionStrings:Laundry before using the database.")));
@@ -40,10 +63,13 @@ builder.Services.AddHealthChecks()
 var app = builder.Build();
 
 app.UseDevelopmentManagementBoundary();
+app.UseDevelopmentOrderBoundary();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapDevelopmentManagementSession();
 app.MapDevelopmentManagementAccess();
+app.MapDevelopmentCustomers();
+app.MapDevelopmentOrderPlanning();
 
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanIngestion:Enabled"))
 {

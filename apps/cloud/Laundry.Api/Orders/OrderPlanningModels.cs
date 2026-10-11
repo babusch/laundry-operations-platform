@@ -30,6 +30,14 @@ public interface IOrderPlanningAccess
     Task<bool> IsCustomerEligibleAsync(OrderPlanningScope scope, Guid customerId, CancellationToken cancellationToken);
 }
 
+// Relational composition seam: participants join the owning order transaction, not a
+// separate permissive snapshot. No persistence entities are part of this contract.
+public interface ITransactionalOrderPlanningAccess : IOrderPlanningAccess
+{
+    Task<IAsyncDisposable> BindTransactionAsync(System.Data.Common.DbConnection connection,
+        System.Data.Common.DbTransaction transaction, OrderPlanningScope scope, CancellationToken ct);
+}
+
 public sealed class OrderPlanningException(string code) : Exception(code)
 {
     public string Code { get; } = code;

@@ -37,6 +37,19 @@ public sealed class ManagementAccessStore(ManagementAccessDbContext database)
         return ManagementOrderAuthorization.TryAuthorize(actor, [grant], tenantId, plantId, permission, out _);
     }
 
+    // Hold membership and permission rows until the owning business transaction completes.
+    public async Task<bool> IsAllowedForMutationAsync(ManagementActor actor, Guid tenantId, Guid plantId,
+        string permission, CancellationToken ct = default)
+    {
+        if (database.Database.CurrentTransaction is null) throw new InvalidOperationException("Mutation authorization requires the owning transaction.");
+        if (!ValidHuman(actor) || !OrderPlanningPermissions.IsKnown(permission)) return false;
+        var membership = await database.Memberships.FromSqlInterpolated($"SELECT * FROM identity_access.plant_memberships WHERE actor_issuer = {actor.Issuer} AND actor_subject = {actor.Subject} AND tenant_id = {tenantId} AND plant_id = {plantId} AND is_active = TRUE FOR SHARE")
+            .AsNoTracking().SingleOrDefaultAsync(ct);
+        if (membership is null) return false;
+        return await database.Permissions.FromSqlInterpolated($"SELECT * FROM identity_access.plant_membership_permissions WHERE membership_id = {membership.Id} AND permission = {permission} FOR SHARE")
+            .AsNoTracking().AnyAsync(ct);
+    }
+
     // Explicit local Development provisioning only. Never call automatically on login.
     // The API host guards this command against non-Development use; it has no HTTP route.
     public async Task<bool> InitializeDevelopmentAsync(string subject, CancellationToken ct = default)
@@ -56,8 +69,12 @@ public sealed class ManagementAccessStore(ManagementAccessDbContext database)
 
         var membership = new PlantMembership
         {
-            Id = Guid.NewGuid(), ActorIssuer = DevelopmentIssuer, ActorSubject = subject,
-            TenantId = DevelopmentTenant, PlantId = DevelopmentPlant, IsActive = true,
+            Id = Guid.NewGuid(),
+            ActorIssuer = DevelopmentIssuer,
+            ActorSubject = subject,
+            TenantId = DevelopmentTenant,
+            PlantId = DevelopmentPlant,
+            IsActive = true,
             CreatedAtUtc = DateTimeOffset.UtcNow
         };
         membership.Permissions = OrderPlanningPermissions.Management.Order(StringComparer.Ordinal)
@@ -65,13 +82,20 @@ public sealed class ManagementAccessStore(ManagementAccessDbContext database)
         database.Memberships.Add(membership);
         database.AuditEntries.Add(new MembershipAuditEntry
         {
-            Id = Guid.NewGuid(), MembershipId = membership.Id, MembershipVersion = 1,
-            Action = "development_membership_created", RecordedAtUtc = membership.CreatedAtUtc,
+            Id = Guid.NewGuid(),
+            MembershipId = membership.Id,
+            MembershipVersion = 1,
+            Action = "development_membership_created",
+            RecordedAtUtc = membership.CreatedAtUtc,
             RecordedBy = "local-development-setup:" + Environment.UserName,
             AfterState = JsonSerializer.Serialize(new
             {
-                membership.ActorIssuer, membership.ActorSubject, membership.TenantId, membership.PlantId,
-                membership.IsActive, permissions = membership.Permissions.Select(x => x.Permission)
+                membership.ActorIssuer,
+                membership.ActorSubject,
+                membership.TenantId,
+                membership.PlantId,
+                membership.IsActive,
+                permissions = membership.Permissions.Select(x => x.Permission)
             })
         });
         await database.SaveChangesAsync(ct);

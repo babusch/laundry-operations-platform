@@ -13,6 +13,7 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 | Equipment asset | Optional physical scanner, reader, scale, or machine record added when configuration, health, maintenance, calibration, or verified hardware attribution requires it |
 | Operation | Intended task, such as receiving, dispatch, lookup, or inventory counting; separate from source identity |
 | Laundry customer | Hotel, hospital, care facility, restaurant, or other serviced organization |
+| Customer plant service | Explicit configuration that a given plant may serve a tenant-owned customer; customer ownership and service eligibility are separate |
 | Article type | Product definition such as sheet, towel, garment, or mat |
 | Textile item | Individually identifiable physical article, commonly carrying RFID |
 | Quantity line | Aggregate count or weight when individual tracking is not used |
