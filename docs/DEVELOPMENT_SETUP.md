@@ -198,7 +198,7 @@ Run these commands from the repository root with Docker Desktop running:
 docker compose up --detach --wait
 dotnet tool restore
 dotnet restore LaundryOperations.sln
-dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
+dotnet ef database update --project apps/cloud/Laundry.Api --context ScanDbContext -- --environment Development
 dotnet run --project apps/cloud/Laundry.Api
 ```
 
@@ -262,6 +262,28 @@ Stop the API with **Ctrl+C**, and stop the development database with `docker com
 
 ## Repository-local .NET tools
 
+### Order storage development slice
+
+The cloud project now contains two database contexts. Always specify `--context ScanDbContext` for the existing scan migrations. Order storage has its own `OrderDbContext`, `orders` schema, and `orders.__order_migrations_history`; it is not registered with the running API and has no HTTP routes yet.
+
+The order migration has been verified only in disposable test databases, not applied to your Compose database. To exercise the storage slice without changing your development data, start Docker Desktop and run:
+
+```powershell
+dotnet test apps/cloud/Laundry.Api.Tests --filter "FullyQualifiedName~Order"
+```
+
+This covers planned-order creation/editing, scoped authorization and customer-eligibility seams, transactional history/receipts, concurrent retries/edits, and failed-save recovery. Human authentication and customer management are not implemented by these tests.
+
+To generate a future order migration (no database connection needed):
+
+```powershell
+dotnet ef migrations add DescriptiveChangeName --project apps/cloud/Laundry.Api --context OrderDbContext --output-dir Orders/Migrations
+```
+
+The design-time order context deliberately uses a nonfunctional placeholder connection. Applying order migrations to a real database will require an explicitly supplied connection and a separately reviewed setup step. There is no automatic startup migration or synthetic customer seeding.
+
+### Tool manifest
+
 For gateway startup and its explicit migration command, see [Run the local gateway](#run-the-local-gateway) below.
 
 `.config/dotnet-tools.json` is a tool manifest: a list of command-line tools and the exact versions this repository uses. The directory holds configuration, not the installed tool binaries or database files.
@@ -281,7 +303,7 @@ Run `dotnet tool restore` after cloning the repository or when its tool versions
 Complete [local identity setup](LOCAL_IDENTITY_SETUP.md) first. With Docker running, apply pending migrations before starting the API:
 
 ```powershell
-dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
+dotnet ef database update --project apps/cloud/Laundry.Api --context ScanDbContext -- --environment Development
 dotnet run --project apps/cloud/Laundry.Api
 ```
 
@@ -465,7 +487,7 @@ Complete [local identity setup](LOCAL_IDENTITY_SETUP.md) first. Start both datab
 docker compose up --detach --wait postgres plant-postgres
 docker compose -f docker-compose.identity.yml up --detach --wait
 ./deploy/local/Initialize-Gateway-Identity.ps1
-dotnet ef database update --project apps/cloud/Laundry.Api -- --environment Development
+dotnet ef database update --project apps/cloud/Laundry.Api --context ScanDbContext -- --environment Development
 dotnet ef database update --project apps/edge/Laundry.Edge -- --environment Development
 ```
 

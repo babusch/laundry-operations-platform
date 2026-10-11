@@ -1,6 +1,6 @@
 # Project status
 
-Last updated: 2026-10-04
+Last updated: 2026-10-11
 
 ## Current phase
 
@@ -47,6 +47,12 @@ Before that implementation begins, confirm:
 - Regulatory, hygiene, retention, and data-residency constraints.
 
 ## Active architectural baseline
+
+Order storage slice implemented and verified (2026-10-11): `Laundry.Api/Orders` now provides isolated PostgreSQL persistence for manual planned-order creation, scoped detail lookup, and planned-only edits. Orders, append-only attributed history, durable command receipts, and per-plant number allocation commit atomically; identical retries preserve original receipts and stale edits cannot overwrite newer plans. Twenty new tests cover validation, concurrent saves, scope/access and customer-eligibility seams, history protection, rollback, and outage recovery. The full .NET suite passes: 217 tests (83 cloud, 133 gateway, one cross-component). Human authentication/customer master records are not implemented: the required access seam has no permissive production implementation, and no order services/routes are registered with the running API. The new migration was applied only in disposable tests, not the Compose database. Existing scan migration commands now explicitly specify `ScanDbContext`. See [Order planning contract](ORDER_PLANNING_CONTRACT.md) and [setup guide](DEVELOPMENT_SETUP.md#order-storage-development-slice).
+
+Approved planned-order editing rule (2026-10-11): customer, planned receiving/delivery dates, customer reference, and notes may be edited while the order is planned. Once receiving starts, planning edits are rejected; later changes to active orders require separately reviewed rules. See [Order planning contract](ORDER_PLANNING_CONTRACT.md). The rule is enforced in storage; receiving activation and HTTP endpoints are not yet implemented.
+
+Order-planning API design under review: [Order planning contract](ORDER_PLANNING_CONTRACT.md) proposes management endpoints for manual creation, list/detail/history reads, and planned-only edits. Storage is implemented as described above; endpoints, generated clients, and management UI are not. Human management authentication and real customer/plant eligibility are prerequisites; publication to the gateway and operational order authority remain separate future work.
 
 Approved whole-order completion (2026-10-04): ordinary operators explicitly confirm completion after reviewing incoming, outgoing, and exception totals. Each received item must be dispatched or accounted for through a recorded resolution; unresolved items block completion. Completion records the operator/time and stops further incoming/outgoing actions on that order. Concurrent receipts and corrections must be included in the durable completion check. Reopening and post-completion corrections remain unresolved.
 

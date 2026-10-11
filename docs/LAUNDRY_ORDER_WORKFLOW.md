@@ -214,4 +214,6 @@ These points are plausible but were described speculatively and are not approved
 
 ## First implementation boundary
 
+The proposed first management slice is manual creation, listing, detail/history reads, and planned-only edits. Its database tables, retry protection, authorization requirements, and HTTP contract are in [Order planning contract](ORDER_PLANNING_CONTRACT.md). This proposal is awaiting review; it does not implement or activate receiving.
+
 Before building this workflow, agree on order selection/creation and completion behavior, then define the smallest vertical slice around one customer, one open order, one individually tagged item, one authenticated operator, and incoming plus outgoing actions. Continue using simulated identifiers until real reader hardware is available.
