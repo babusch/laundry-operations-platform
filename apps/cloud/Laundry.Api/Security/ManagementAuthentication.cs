@@ -185,6 +185,16 @@ public static class ManagementAuthentication
                     AllowRefresh = false
                 });
             }
+            catch (OpenIdConnectProtocolException)
+            {
+                // PAR can reject client authentication before the browser redirect/callback.
+                // Do not expose the provider exception or silently bypass this security check.
+                http.Response.Clear();
+                http.Response.Headers.CacheControl = "no-store";
+                http.Response.Headers["Referrer-Policy"] = "no-referrer";
+                http.Response.StatusCode = 502;
+                await http.Response.WriteAsJsonAsync(new { code = "management_identity_rejected" });
+            }
             catch (Exception exception) when (exception is HttpRequestException or IOException or InvalidOperationException or OperationCanceledException)
             {
                 http.Response.Clear();

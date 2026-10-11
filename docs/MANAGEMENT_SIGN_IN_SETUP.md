@@ -1,6 +1,6 @@
 # Development management sign-in: guided setup
 
-Status: backend proof implemented and tested against a synthetic identity provider. Real Keycloak login still needs the local setup and a manual browser check below.
+Status: backend proof implemented; real Keycloak login/session status and browser local sign-out verified by the user on 2026-10-11. Real timed session expiry remains to be verified.
 Date: 2026-10-11.
 
 This does not create order access or operator station login. It tests only that a person can sign in to the management backend, inspect a safe status, and sign out locally. No order/customer database migration is needed.
@@ -28,7 +28,7 @@ Wait until the identity test succeeds. Open [Keycloak administration](https://lo
 In Keycloak, select the **laundry-development** realm, not **master**. Open **Clients**, then **Import client**. Select this public, credential-free file:
 
 ```text
-C:\Users\jens\Documents\GitHub\laundry-operations-platform\deploy\local\keycloak\management-development-client.json
+C:\Users\jens\Documents\GitHub\laundry-operations-platform\deploy\local\management-development-client.json
 ```
 
 Import it once. If `management-development` already exists, inspect/update that client rather than creating a duplicate or changing `gateway-development`.
@@ -45,6 +45,8 @@ Check its settings:
 Open this client's **Credentials** tab. Keycloak generates its client secret; copy it into the application-secret entry in your password manager. Do not regenerate it unless you also update the private value you use when starting the backend.
 
 This file is deliberately separate from the existing realm import. Editing a startup realm JSON does not update an already-imported realm; no identity database reset or gateway reconfiguration is needed.
+
+Keep manual client-import JSON outside `deploy/local/keycloak`: that entire directory is mounted as Keycloak's automatic realm-import directory. Client-only JSON there prevents Keycloak from starting.
 
 ## 3. Create a synthetic person account
 
@@ -65,6 +67,8 @@ From a normal PowerShell terminal at the repository root:
 ```
 
 When prompted, paste the **application client secret from step 2**, not the user's password. Input is hidden. The helper temporarily sets `ManagementAuthentication__Enabled` and `ManagementAuthentication__ClientSecret` for the process, starts the cloud API, and restores the prior process settings when it exits. Credentials in process memory/environment remain accessible to sufficiently privileged local tools: this is a development setup, not production secret management.
+
+Before starting the API, the helper checks that exact pasted secret with Keycloak's PAR endpoint over trusted HTTPS. It prints only acceptance or a safe failure message; failed verification stops startup. It also sets the fixed Development authority/client ID for this run, restoring their previous process settings afterward. No provider response URI or credential is displayed. The check creates only a short-lived unused authorization request, not a user login or business action. This helper supports both Windows PowerShell 5.1 and PowerShell 7; it does not use newer-only static crypto APIs or `-SkipHttpErrorCheck`.
 
 ASP.NET Core does not automatically read `.env`. There is no need to add these two new credentials to it. Keep the password-manager entries for the next run and use the hidden prompt again.
 
@@ -103,6 +107,7 @@ Sign-out removes this application's cookie locally and works even when Keycloak 
 
 ## Failure feedback
 
+- Login initiation rejected by Keycloak returns 502 and `management_identity_rejected`. For example, Keycloak reports `invalid_client_credentials` when the application's supplied client secret is not accepted. Stop the API with Ctrl+C, copy the current secret from **laundry-development → Clients → management-development → Credentials**, and rerun the helper with that secret. Do not use the demo-user password, administrator password, or gateway secret. No secret needs to be shared with an agent. Pushed Authorization Requests (PAR) remains enabled when the provider advertises it; this failure must not trigger an insecure fallback.
 - Login initiation with an unavailable identity provider returns 503 and `management_identity_unavailable`; process liveness remains independent.
 - An invalid/interrupted callback returns 400 and `management_login_failed`, without exposing token/identity details. Restart from `/management/login`; do not copy callback URL parameters into chat.
 - Wrong client secret, disabled user, or Keycloak required actions may interrupt login. Check public settings and the browser's safe error first. Do not share passwords, expanded Compose configuration, tokens, or authentication cookies.
@@ -110,7 +115,7 @@ Sign-out removes this application's cookie locally and works even when Keycloak 
 
 ## Verification and limits
 
-All 24 `ManagementSignInTests` cases pass using the real OIDC/cookie handlers with a synthetic signed provider response. They test code/PKCE, fixed return location, issuer/audience/signature/lifetime/state/nonce rejection, missing subject, anonymous access, gateway/management scheme separation, protected bounded cookies without provider tokens, CSRF/local logout, provider outage, disabled/non-Development/transport restrictions, and the public client import configuration. The full .NET suite passes with 262 tests. This does not replace real Keycloak/browser verification.
+All 27 focused `ManagementSignInTests` cases pass, including accepted/rejected PAR handshakes and the startup-import regression. They use real OIDC/cookie handlers with synthetic signed provider responses to check code/PKCE, fixed return location, issuer/audience/signature/lifetime/state/nonce rejection, missing subject, anonymous access, gateway/management scheme separation, protected bounded cookies without provider tokens, CSRF/local logout, provider outage, disabled/non-Development/transport restrictions, and public client configuration. The full .NET suite last passed with 262 tests before the additional regression cases; it has not been rerun since those corrections. Trusted Keycloak discovery, actual management browser login/session status, and local sign-out are verified. Real timed expiry verification remains pending.
 
 Commands:
 
@@ -119,4 +124,11 @@ dotnet test apps/cloud/Laundry.Api.Tests --filter "FullyQualifiedName~Management
 dotnet test LaundryOperations.sln
 ```
 
-No actual management client/user was created by the agent, no private `.env` contents were inspected, and no real login has yet been verified. The next small user step is importing the client in step 2. Production cookie-key lifecycle, revocation, membership loading, order access, management UI, and offline operator authentication remain unimplemented.
+Startup-helper compatibility tests use only synthetic inputs and mocked network/server commands:
+
+```powershell
+powershell.exe -NoProfile -File tests/management/Test-DevelopmentManagementHelper.ps1
+pwsh -NoProfile -File tests/management/Test-DevelopmentManagementHelper.ps1
+```
+
+The user created the actual management client/demo user and verified real browser login/session status on 2026-10-11, showing `authenticated: true` and `orderAccessEnabled: false`. The agent did not create those accounts or inspect private `.env` contents. A specifically authorized registered development management-secret check succeeded without exposing/storing its value or changing it. The user subsequently verified local sign-out, with the session page returning HTTP 401. Real timed expiry remains unverified. Production cookie-key lifecycle, revocation, membership loading, order access, management UI, and offline operator authentication remain unimplemented.

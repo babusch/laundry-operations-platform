@@ -34,6 +34,7 @@ public sealed class ManagementSignInTests : IDisposable
     private string _failure = "";
     private string? _verifier;
     private string _challenge = "";
+    private string _parState = "";
 
     [Theory]
     [InlineData("Development", false)]
@@ -172,6 +173,19 @@ public sealed class ManagementSignInTests : IDisposable
     }
 
     [Fact]
+    public void StartupImportDirectory_ContainsOnlyRealmRepresentations()
+    {
+        var files = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Identity", "StartupImport"), "*.json");
+        Assert.NotEmpty(files);
+        foreach (var file in files)
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            Assert.True(document.RootElement.TryGetProperty("realm", out _), "Automatic startup imports must be realm representations, not manual client imports.");
+            Assert.False(document.RootElement.TryGetProperty("clientId", out _));
+        }
+    }
+
+    [Fact]
     public void ClientImport_RequiresConfidentialCodePkceAndNoMachineOrPasswordGrant()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Identity", "management-development-client.json")));
@@ -240,6 +254,33 @@ public sealed class ManagementSignInTests : IDisposable
     }
 
     [Fact]
+    public async Task PushedAuthorization_AcceptsConfidentialPkceLoginWithoutChangingTheFlow()
+    {
+        await using var app = Application(usePar: true);
+        using var client = Client(app);
+        using var callback = await LoginAsync(client);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace(_parState));
+        Assert.Equal(_challenge, Base64UrlEncoder.Encode(SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(_verifier!))));
+        using var session = await client.GetAsync("/management/session");
+        Assert.Equal(HttpStatusCode.OK, session.StatusCode);
+    }
+
+    [Fact]
+    public async Task PushedAuthorization_ClientRejectionReturnsSafeErrorWithoutFallbackOrExceptionPage()
+    {
+        await using var app = Application(usePar: true, secret: "synthetic-wrong-client-secret");
+        using var client = Client(app);
+        using var login = await client.GetAsync("/management/login");
+        Assert.Equal(HttpStatusCode.BadGateway, login.StatusCode);
+        Assert.Null(login.Headers.Location);
+        Assert.Equal("{\"code\":\"management_identity_rejected\"}", await login.Content.ReadAsStringAsync());
+        Assert.Equal("no-store", login.Headers.CacheControl!.ToString());
+        using var session = await client.GetAsync("/management/session");
+        Assert.Equal(HttpStatusCode.Unauthorized, session.StatusCode);
+    }
+
+    [Fact]
     public async Task ProviderUnavailable_LoginReturnsSafe503()
     {
         await using var app = Application(unavailable: true);
@@ -260,7 +301,7 @@ public sealed class ManagementSignInTests : IDisposable
     }
 
     private WebApplicationFactory<Program> Application(string environment = "Development", bool enabled = true,
-        string remoteAddress = "127.0.0.1", bool unavailable = false, string secret = "synthetic-client-secret") =>
+        string remoteAddress = "127.0.0.1", bool unavailable = false, string secret = "synthetic-client-secret", bool usePar = false) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
@@ -284,6 +325,7 @@ public sealed class ManagementSignInTests : IDisposable
                 {
                     var configuration = new OpenIdConnectConfiguration
                     {
+                        PushedAuthorizationRequestEndpoint = usePar ? Issuer + "/par" : null,
                         Issuer = Issuer,
                         AuthorizationEndpoint = Issuer + "/authorize",
                         TokenEndpoint = Issuer + "/token"
@@ -303,12 +345,21 @@ public sealed class ManagementSignInTests : IDisposable
     {
         using var login = await client.GetAsync("/management/login");
         var query = QueryHelpers.ParseQuery(login.Headers.Location!.Query);
-        _nonce = query["nonce"].ToString();
-        _challenge = query["code_challenge"].ToString();
+        var state = query.TryGetValue("state", out var stateValue) ? stateValue.ToString() : "";
+        if (query.ContainsKey("request_uri"))
+        {
+            Assert.Equal("urn:ietf:params:oauth:request_uri:synthetic-request", query["request_uri"]);
+            state = _parState;
+        }
+        else
+        {
+            _nonce = query["nonce"].ToString();
+            _challenge = query["code_challenge"].ToString();
+        }
         return await client.PostAsync(ManagementAuthentication.CallbackPath, new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["code"] = "synthetic-code",
-            ["state"] = _failure == "state" ? "forged" : query["state"].ToString()
+            ["state"] = _failure == "state" ? "forged" : state
         }));
     }
 
@@ -334,8 +385,30 @@ public sealed class ManagementSignInTests : IDisposable
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Assert.EndsWith("/token", request.RequestUri!.AbsolutePath);
             var fields = QueryHelpers.ParseQuery(await request.Content!.ReadAsStringAsync(cancellationToken));
+            if (request.RequestUri!.AbsolutePath.EndsWith("/par", StringComparison.Ordinal))
+            {
+                Assert.Equal(ClientId, fields["client_id"]);
+                if (fields["client_secret"] != "synthetic-client-secret")
+                {
+                    return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                    {
+                        Content = JsonContent.Create(new { error = "invalid_request", error_description = "Authentication failed." })
+                    };
+                }
+
+                Assert.Equal("code", fields["response_type"]);
+                Assert.Equal("S256", fields["code_challenge_method"]);
+                owner._parState = fields["state"].ToString();
+                owner._nonce = fields["nonce"].ToString();
+                owner._challenge = fields["code_challenge"].ToString();
+                return new HttpResponseMessage(HttpStatusCode.Created)
+                {
+                    Content = JsonContent.Create(new { request_uri = "urn:ietf:params:oauth:request_uri:synthetic-request", expires_in = 90 })
+                };
+            }
+
+            Assert.EndsWith("/token", request.RequestUri.AbsolutePath);
             Assert.Equal("authorization_code", fields["grant_type"]);
             Assert.Equal(ClientId, fields["client_id"]);
             Assert.Equal("synthetic-client-secret", fields["client_secret"]);

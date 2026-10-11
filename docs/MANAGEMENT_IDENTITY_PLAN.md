@@ -1,7 +1,7 @@
 # Management identity: small implementation steps
 
 Date: 2026-10-11.
-Status: initial permissions and session hosting approved; isolated authorization rules and disabled-by-default login backend implemented. Real Keycloak/browser login awaits local setup.
+Status: initial permissions and session hosting approved; authorization rules and opt-in login backend implemented. Real Keycloak/browser login, session status, and local sign-out verified by the user on 2026-10-11. Real timed expiry verification remains pending.
 
 ## Approved initial access
 
@@ -22,9 +22,9 @@ The user approved this initial permission set on 2026-10-11. This does not appro
 
 Verification: all 21 new authorization tests pass. The full .NET suite passes with 238 tests (104 cloud, 133 gateway, one cross-component). No UI tests were run because this slice changes no UI. Database regression tests use disposable PostgreSQL containers, not the development databases.
 
-## Step 2: connect management sign-in (backend implemented; live setup pending)
+## Step 2: connect management sign-in (live login/local logout verified; timed expiry check pending)
 
-The user approved [ADR 0019](decisions/0019-management-server-owned-login-session.md): .NET owns the OpenID Connect login and protected management cookie, with the future Next.js UI and backend paths sharing one management HTTPS origin. The first proof runs at the loopback cloud origin without a management UI or order writes. Named authentication schemes, safe session status, and CSRF-protected local sign-out are implemented; gateway bearer authentication remains separate. Sessions last 15 minutes without sliding refresh and retain no provider tokens. A public client import file and hidden-prompt startup helper are added, but no actual Keycloak client/user or application memberships have been created. Follow [Management sign-in setup](MANAGEMENT_SIGN_IN_SETUP.md) for the user-guided live check.
+The user approved [ADR 0019](decisions/0019-management-server-owned-login-session.md): .NET owns the OpenID Connect login and protected management cookie, with the future Next.js UI and backend paths sharing one management HTTPS origin. The first proof runs at the loopback cloud origin without a management UI or order writes. Named authentication schemes, safe session status, and CSRF-protected local sign-out are implemented; gateway bearer authentication remains separate. Sessions last 15 minutes without sliding refresh and retain no provider tokens. The user imported the separate client, created the demo user, and verified real login/session status and local sign-out. Application memberships have not been created. Follow [Management sign-in setup](MANAGEMENT_SIGN_IN_SETUP.md) for the remaining user-guided timed expiry check.
 
 Use the separate management application client in the existing application realm, not the administrative master realm or gateway client. The backend constructs a minimal protected identity with validated issuer/subject and server-owned interactive-login provenance. Production hosting, session/key lifecycle, broader sign-out, and revocation are not decided by this Development proof.
 

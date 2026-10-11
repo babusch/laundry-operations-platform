@@ -1,7 +1,7 @@
 {
   "clientId": "management-development",
   "name": "Laundry management development login",
-  "description": "Loopback-only interactive sign-in proof; no service account or application permissions",
+  "description": "Manual client import only; loopback interactive sign-in proof with no service account or application permissions",
   "enabled": true,
   "protocol": "openid-connect",
   "clientAuthenticatorType": "client-secret",
