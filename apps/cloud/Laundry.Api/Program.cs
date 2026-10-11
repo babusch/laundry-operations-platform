@@ -8,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<ScanContractValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddGatewayAuthentication(builder.Configuration);
+builder.Services.AddDevelopmentManagementAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddDbContext<ScanDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Laundry")
         ?? throw new InvalidOperationException("Configure ConnectionStrings:Laundry before using the database.")));
@@ -16,8 +17,10 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+app.UseDevelopmentManagementBoundary();
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapDevelopmentManagementSession();
 
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanIngestion:Enabled"))
 {

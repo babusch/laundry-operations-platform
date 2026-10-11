@@ -11,7 +11,9 @@ Manually create, list, view, and edit planned service-cycle orders in the manage
 
 The management application calls the existing cloud API, which stores these records in cloud PostgreSQL. Order planning belongs to an explicit order module in the modular monolith, separate from raw scan ingestion. No new service or datastore is proposed. Use migrations and a separate management OpenAPI contract to generate the TypeScript client; do not reuse the station-source contract or scan persistence entities.
 
-Technical details below remain proposed defaults, including field limits, permission names, and numbering scope. The planned-order editing rule is approved as recorded above.
+Remaining technical details below are proposed defaults, including field limits and numbering scope. The planned-order editing rule and initial management permission bundle are approved as recorded here.
+
+Permission review update (2026-10-11): the initial management account's scoped read/create/planned-edit bundle is approved, with the permission identifiers `orders.read`, `orders.create`, and `orders.plan.edit` implemented as module-owned constants. Pure human/grant authorization rules are implemented; actual sign-in and membership/customer integration are not. See [Management identity plan](MANAGEMENT_IDENTITY_PLAN.md). HTTP/API details remain proposed.
 
 ## Main table: `orders.service_orders`
 

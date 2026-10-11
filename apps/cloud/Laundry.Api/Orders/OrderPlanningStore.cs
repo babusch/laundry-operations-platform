@@ -24,7 +24,7 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
     public async Task<ServiceOrder?> GetAsync(OrderPlanningScope scope, Guid orderId,
         CancellationToken cancellationToken = default)
     {
-        await AuthorizeAsync(scope, "orders.read", cancellationToken);
+        await AuthorizeAsync(scope, OrderPlanningPermissions.Read, cancellationToken);
         await using var db = new OrderDbContext(options);
         return await db.Orders.AsNoTracking().SingleOrDefaultAsync(x =>
             x.TenantId == scope.TenantId && x.PlantId == scope.PlantId && x.Id == orderId, cancellationToken);
@@ -33,7 +33,7 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
     private async Task<OrderPlanningReceipt> SaveAsync(OrderPlanningScope scope, Guid key, Guid? orderId,
         long? expectedVersion, OrderPlan input, CancellationToken ct)
     {
-        await AuthorizeAsync(scope, orderId.HasValue ? "orders.plan.edit" : "orders.create", ct);
+        await AuthorizeAsync(scope, orderId.HasValue ? OrderPlanningPermissions.EditPlan : OrderPlanningPermissions.Create, ct);
         if (key == Guid.Empty || orderId == Guid.Empty || expectedVersion <= 0)
         {
             throw new OrderPlanningException("invalid_command");
@@ -53,7 +53,7 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
             $"order-planning:{scope.TenantId:D}:{scope.PlantId:D}")));
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", ct);
         // Recheck after waiting for another writer, including before returning a saved receipt.
-        await AuthorizeAsync(scope, orderId.HasValue ? "orders.plan.edit" : "orders.create", ct);
+        await AuthorizeAsync(scope, orderId.HasValue ? OrderPlanningPermissions.EditPlan : OrderPlanningPermissions.Create, ct);
         var previous = await db.CommandReceipts.SingleOrDefaultAsync(x =>
             x.TenantId == scope.TenantId && x.PlantId == scope.PlantId &&
             x.ActorIssuer == scope.ActorIssuer && x.ActorSubject == scope.ActorSubject && x.IdempotencyKey == key, ct);
@@ -117,10 +117,15 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
             counter.LastNumber++;
             order = new ServiceOrder
             {
-                Id = Guid.NewGuid(), TenantId = scope.TenantId, PlantId = scope.PlantId,
+                Id = Guid.NewGuid(),
+                TenantId = scope.TenantId,
+                PlantId = scope.PlantId,
                 OrderNumber = "ORD-" + counter.LastNumber.ToString("D6", CultureInfo.InvariantCulture),
-                CreatedAtUtc = now, UpdatedAtUtc = now, CreatedByIssuer = scope.ActorIssuer,
-                CreatedBySubject = scope.ActorSubject, UpdatedByIssuer = scope.ActorIssuer,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now,
+                CreatedByIssuer = scope.ActorIssuer,
+                CreatedBySubject = scope.ActorSubject,
+                UpdatedByIssuer = scope.ActorIssuer,
                 UpdatedBySubject = scope.ActorSubject
             };
             order.Apply(plan);
@@ -131,27 +136,51 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
         {
             db.AuditEntries.Add(new OrderAuditEntry
             {
-                Id = Guid.NewGuid(), TenantId = scope.TenantId, PlantId = scope.PlantId, OrderId = order.Id,
-                Action = orderId.HasValue ? "order_plan_changed" : "order_created", OrderVersion = order.Version,
-                RecordedAtUtc = now, ActorIssuer = scope.ActorIssuer, ActorSubject = scope.ActorSubject,
-                RequestId = key, BeforePlan = before is null ? null : JsonSerializer.Serialize(before, JsonOptions),
+                Id = Guid.NewGuid(),
+                TenantId = scope.TenantId,
+                PlantId = scope.PlantId,
+                OrderId = order.Id,
+                Action = orderId.HasValue ? "order_plan_changed" : "order_created",
+                OrderVersion = order.Version,
+                RecordedAtUtc = now,
+                ActorIssuer = scope.ActorIssuer,
+                ActorSubject = scope.ActorSubject,
+                RequestId = key,
+                BeforePlan = before is null ? null : JsonSerializer.Serialize(before, JsonOptions),
                 AfterPlan = JsonSerializer.Serialize(plan, JsonOptions)
             });
         }
 
         var receipt = new OrderCommandReceipt
         {
-            TenantId = scope.TenantId, PlantId = scope.PlantId, ActorIssuer = scope.ActorIssuer,
-            ActorSubject = scope.ActorSubject, IdempotencyKey = key, Operation = operation, Target = target,
-            RequestFingerprint = fingerprint, OrderId = order.Id, ResponseStatus = orderId.HasValue ? 200 : 201,
+            TenantId = scope.TenantId,
+            PlantId = scope.PlantId,
+            ActorIssuer = scope.ActorIssuer,
+            ActorSubject = scope.ActorSubject,
+            IdempotencyKey = key,
+            Operation = operation,
+            Target = target,
+            RequestFingerprint = fingerprint,
+            OrderId = order.Id,
+            ResponseStatus = orderId.HasValue ? 200 : 201,
             ResponseBody = JsonSerializer.Serialize(new
             {
-                order.Id, order.PlantId, order.OrderNumber, order.CustomerId, order.PlannedReceivingDate,
-                order.PlannedDeliveryDate, order.CustomerReference, order.Notes, order.Status, order.Version,
-                order.CreatedAtUtc, order.UpdatedAtUtc
+                order.Id,
+                order.PlantId,
+                order.OrderNumber,
+                order.CustomerId,
+                order.PlannedReceivingDate,
+                order.PlannedDeliveryDate,
+                order.CustomerReference,
+                order.Notes,
+                order.Status,
+                order.Version,
+                order.CreatedAtUtc,
+                order.UpdatedAtUtc
             }, JsonOptions),
             ResponseEtag = $"\"{order.Id:D}:{order.Version.ToString(CultureInfo.InvariantCulture)}\"",
-            ResponseLocation = $"/api/v1/plants/{scope.PlantId:D}/orders/{order.Id:D}", AcceptedAtUtc = now
+            ResponseLocation = $"/api/v1/plants/{scope.PlantId:D}/orders/{order.Id:D}",
+            AcceptedAtUtc = now
         };
         db.CommandReceipts.Add(receipt);
         await db.SaveChangesAsync(ct);

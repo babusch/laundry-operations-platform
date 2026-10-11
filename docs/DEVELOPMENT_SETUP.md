@@ -262,6 +262,8 @@ Stop the API with **Ctrl+C**, and stop the development database with `docker com
 
 ## Repository-local .NET tools
 
+For the separate, disabled-by-default management login proof, follow [Management sign-in setup](MANAGEMENT_SIGN_IN_SETUP.md). It uses a distinct Keycloak client and hidden-prompt startup helper; the normal API startup does not enable it. No order writes are exposed.
+
 ### Order storage development slice
 
 The cloud project now contains two database contexts. Always specify `--context ScanDbContext` for the existing scan migrations. Order storage has its own `OrderDbContext`, `orders` schema, and `orders.__order_migrations_history`; it is not registered with the running API and has no HTTP routes yet.

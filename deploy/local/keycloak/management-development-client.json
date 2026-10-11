@@ -1,0 +1,24 @@
+{
+  "clientId": "management-development",
+  "name": "Laundry management development login",
+  "description": "Loopback-only interactive sign-in proof; no service account or application permissions",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "clientAuthenticatorType": "client-secret",
+  "publicClient": false,
+  "bearerOnly": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "fullScopeAllowed": false,
+  "redirectUris": [
+    "https://localhost:7100/management/signin-oidc"
+  ],
+  "webOrigins": [],
+  "defaultClientScopes": [],
+  "optionalClientScopes": [],
+  "attributes": {
+    "pkce.code.challenge.method": "S256"
+  }
+}
