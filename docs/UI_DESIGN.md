@@ -103,6 +103,8 @@ Administrative interfaces may use denser layouts than operator stations, but hie
 
 Planned-order editing reuses the create form's controls and feedback. Show the order number and prefill the saved fields. A stale save retains the person's entries and displays an amber, read-only latest-plan comparison. Saving stays disabled until an explicit review accepts that displayed version for a new command; review itself never saves. Do not silently merge, refresh the version or discard edits. Current state is loaded after successful retry so historical acknowledgements cannot appear to revert later edits. This temporary server-rendered bridge retains its documented normal-navigation limitations; no phone-specific workflow, gesture animation or light theme is added.
 
+Order history in the Development management bridge uses chronological versioned entries, an original-plan definition list and clearly labeled Before/After columns for changed fields only. Preserve multiline text and wrap long values; never rely on red/green alone to indicate differences. Account names are recorded snapshots; missing names are explicit. Customer labels are marked as current names, not historical snapshots. Show Europe/Stockholm and numeric offset for timestamps without changing UTC storage. Use ordinary links back to details and bounded continuation; no animation or script dependency is introduced in this temporary bridge.
+
 ## UI completion checklist
 
 - The common task is obvious without explanation.

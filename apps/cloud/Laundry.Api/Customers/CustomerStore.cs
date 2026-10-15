@@ -42,6 +42,17 @@ public sealed class CustomerStore(CustomerDbContext database) : ICustomerPlantEl
         Eligible(tenantId, plantId).OrderBy(x => x.Code).ThenBy(x => x.Id).Take(101)
             .Select(x => new CustomerChoice(x.Id, x.Code, x.DisplayName)).ToArrayAsync(ct);
 
+    // Current labels for bounded historical references; inactivity must not erase history.
+    public Task<CustomerChoice[]> ReadHistoryLabelsAsync(Guid tenantId, Guid plantId, Guid[] ids, CancellationToken ct = default)
+    {
+        if (ids.Length > 51) throw new ArgumentOutOfRangeException(nameof(ids));
+        return (from customer in database.Customers.AsNoTracking()
+                join service in database.PlantServices.AsNoTracking()
+                    on new { customer.TenantId, CustomerId = customer.Id } equals new { service.TenantId, service.CustomerId }
+                where customer.TenantId == tenantId && service.PlantId == plantId && ids.Contains(customer.Id)
+                select new CustomerChoice(customer.Id, customer.Code, customer.DisplayName)).ToArrayAsync(ct);
+    }
+
     // Called only by the explicit host-guarded Development setup command, never on login.
     public async Task<bool> InitializeDevelopmentAsync(Guid tenantId, Guid plantId, CancellationToken ct = default)
     {

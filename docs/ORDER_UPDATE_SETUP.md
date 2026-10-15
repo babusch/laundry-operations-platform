@@ -2,6 +2,8 @@
 
 Date: 2026-10-11. The protected API was implemented first; the user subsequently authorized the edit page.
 
+Upgrade note (2026-10-15): live editing has now been confirmed by the user. The subsequent history API adds a nullable audit account-name column; apply that explicit migration before running the new build, following [history setup](ORDER_HISTORY_SETUP.md). No existing audit is renamed/backfilled and no receiving/dispatch behavior changes.
+
 ## Scope
 
 `PUT /api/v1/plants/{plantId}/orders/{orderId}/plan` replaces customer, planned receiving date, planned delivery date, customer reference and notes. Only planned orders can be edited. IDs, plant, order number, creation attribution and status cannot be supplied or changed. No schema migration, dependency, service or lifecycle transition is added.

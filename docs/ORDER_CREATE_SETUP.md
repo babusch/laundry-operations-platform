@@ -1,6 +1,8 @@
 # Protected planned-order creation: Development proof
 
 Date: 2026-10-11.
+
+Upgrade note (2026-10-15): the history API adds a nullable audit account-name column. Before starting the new build or writing orders, apply its explicit migration as described in [history setup](ORDER_HISTORY_SETUP.md). This does not recreate orders or rewrite historical audits. Live application and profile-scope configuration remain pending.
 Status: first create endpoint implemented and tested. On 2026-10-11 the user applied the live Development migration, created `ORD-000001` (`planned`, version 1, HTTP 201), and retried the same retained command with the same ID/number/timestamps. Read-only scoped database counts confirm one demo order, one creation audit, and one command receipt. The migration itself created no order; the deliberate browser command did.
 
 ## Enabled actions

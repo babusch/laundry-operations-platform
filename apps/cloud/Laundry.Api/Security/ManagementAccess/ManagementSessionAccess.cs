@@ -20,7 +20,9 @@ public static class ManagementSessionAccess
         var markers = identity.FindAll(ManagementAuthentication.SessionMarker).ToArray();
         if (issuers.Length != 1 || issuers[0].Value != expectedIssuer || subjects.Length != 1 ||
             string.IsNullOrWhiteSpace(subjects[0].Value) || markers.Length != 1 || markers[0].Value != "interactive") return false;
-        actor = new ManagementActor(issuers[0].Value, subjects[0].Value, ManagementActorKind.Human, true);
+        var names = identity.FindAll(ManagementAuthentication.AccountNameClaim).ToArray();
+        actor = new ManagementActor(issuers[0].Value, subjects[0].Value, ManagementActorKind.Human, true,
+            names.Length == 1 ? ManagementAuthentication.SafeAccountName(names[0].Value) : null);
         return true;
     }
 

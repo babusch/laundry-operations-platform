@@ -36,6 +36,11 @@ Implementation: named OIDC/cookie handlers and disabled-by-default loopback HTTP
 
 The browser frontend does not need to manage bearer tokens, and authorization stays next to the existing business API. Deployment needs one management HTTPS origin and explicit routing. This adds a framework authentication dependency but no new service/datastore. It leaves production identity hosting and offline station sessions unresolved.
 
+## Accepted display-metadata extension (2026-10-15)
+
+The user approved readable account names for future order audit entries. Request optional `profile` with `openid`; after standard token validation retain only one bounded string `preferred_username` in a backend-owned protected claim. Never trust incoming copies of that claim or preserve unrelated profile/email/role/permission claims. Names are nullable display snapshots, not unique identity, authorization, retry identity or a replacement for stable issuer/subject. Missing/invalid/ambiguous names remain unavailable. The order module snapshots this metadata atomically with new audit evidence; historical audit names are not backfilled or changed by profile updates/retries. The additive column and explicit scope attachment are documented in [history setup](../ORDER_HISTORY_SETUP.md). Existing live clients are not automatically reconfigured, and no new service/protocol/dependency or management permission is introduced.
+
+
 ## References
 
 - [Microsoft: OpenID Connect web authentication](https://learn.microsoft.com/en-us/aspnet/core/security/authentication/configure-oidc-web-authentication?view=aspnetcore-10.0)

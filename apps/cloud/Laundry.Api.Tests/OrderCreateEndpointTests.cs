@@ -667,11 +667,13 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         using var response = await Create(anonymous, Guid.NewGuid());
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Path)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"{Path}/{Guid.NewGuid():D}/history")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Update(anonymous, Guid.NewGuid(), $"{Path}/{Guid.NewGuid():D}/plan", null)).StatusCode);
         var gateway = new JwtSecurityToken(ManagementAccessStore.DevelopmentIssuer, "laundry-cloud-api",
             [new Claim("sub", _subject), new Claim("client_id", "gateway-development"), new Claim("laundry_permissions", "orders.create")],
             DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(5), new SigningCredentials(GatewayTestKey, SecurityAlgorithms.HmacSha256));
         anonymous.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtSecurityTokenHandler().WriteToken(gateway));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"{Path}/{Guid.NewGuid():D}/history")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Create(anonymous, Guid.NewGuid())).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Path)).StatusCode);
@@ -700,6 +702,7 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         using var response = await Create(_client, Guid.NewGuid());
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Contains("plant_scope_ambiguous", await response.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Conflict, (await _client.GetAsync($"{Path}/{Guid.NewGuid():D}/history")).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await _client.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await _client.GetAsync(Path)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Update(_client, Guid.NewGuid(), $"{Path}/{Guid.NewGuid():D}/plan", null)).StatusCode);
@@ -775,6 +778,8 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Equal(status, (int)(await client.PostAsync(CreatePagePath, new FormUrlEncodedContent([]))).StatusCode);
         Assert.Equal(status, (int)(await Update(client, Guid.NewGuid(), $"{Path}/{Guid.NewGuid():D}/plan", null)).StatusCode);
         Assert.Equal(status, (int)(await client.GetAsync(EditPath(Guid.NewGuid()))).StatusCode);
+        Assert.Equal(status, (int)(await client.GetAsync($"{Path}/{Guid.NewGuid():D}/history")).StatusCode);
+        Assert.Equal(status, (int)(await client.GetAsync(HistoryPage(Guid.NewGuid()))).StatusCode);
         Assert.Equal(status, (int)(await client.PostAsync(EditPath(Guid.NewGuid()), new FormUrlEncodedContent([]))).StatusCode);
     }
 
@@ -866,13 +871,14 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
     private static HttpClient Client(WebApplicationFactory<Program> app, string origin = "https://localhost:7100") => app.CreateClient(
         new WebApplicationFactoryClientOptions { BaseAddress = new Uri(origin), AllowAutoRedirect = false });
 
-    private void Cookie(HttpClient client, WebApplicationFactory<Program> app, string? subject = null)
+    private void Cookie(HttpClient client, WebApplicationFactory<Program> app, string? subject = null, string? displayName = null)
     {
         subject ??= _subject;
         var principal = new ClaimsPrincipal(new ClaimsIdentity([
             new Claim("iss", ManagementAccessStore.DevelopmentIssuer), new Claim("sub", subject),
             new Claim(ClaimTypes.NameIdentifier, subject), new Claim(ManagementAuthentication.SessionMarker, "interactive")
         ], ManagementAuthentication.CookieScheme));
+        if (displayName is not null) ((ClaimsIdentity)principal.Identity!).AddClaim(new Claim(ManagementAuthentication.AccountNameClaim, displayName));
         var options = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>().Get(ManagementAuthentication.CookieScheme);
         var ticket = new AuthenticationTicket(principal, new AuthenticationProperties
         { IssuedUtc = DateTimeOffset.UtcNow, ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(15) }, ManagementAuthentication.CookieScheme);

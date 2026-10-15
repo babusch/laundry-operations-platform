@@ -6,6 +6,8 @@ The separate management `createOrderPlanningClient` and `src/generated/orders-ap
 
 `src/generated/station-api.ts` is generated from `apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml`. Do not edit the generated file directly. The OpenAPI document references the canonical `submit-scan.v2` JSON Schema so the request shape is not handwritten in the PWA.
 
+The order client also describes `GET /api/v1/plants/{plantId}/orders/{orderId}/history`: current `orders.read`, ascending version pagination (default 25/max 100), order/scoped/limit-bound opaque cursor and no mutation headers. Creation includes `initialPlan`; changes include only changed fields. `actorDisplayName` is nullable verified display metadata; never substitute internal issuer/subject or invent a name. Reads have no writes and customer deactivation does not hide history. No history UI is implemented by this package.
+
 Regenerate and check the client from the repository root:
 
 ```powershell

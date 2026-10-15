@@ -3,6 +3,8 @@
 Status: backend proof implemented; real Keycloak login/session status and browser local sign-out verified by the user on 2026-10-11. Real timed session expiry remains to be verified.
 Date: 2026-10-11.
 
+Account-name addition (2026-10-15): the approved order-history API requests `openid profile` and retains only a validated bounded `preferred_username` as display metadata, never authority or email. The manual client import now lists `profile` as an optional scope; existing clients need that scope attached explicitly before fresh login. Editing import files does not update the live client. See [history setup](ORDER_HISTORY_SETUP.md) for the additive audit migration and activation prerequisites; no secrets/client recreation or extra application permissions are needed. Live inclusion of this claim remains unverified.
+
 This does not create order access or operator station login. It tests only that a person can sign in to the management backend, inspect a safe status, and sign out locally. No order/customer database migration is needed.
 
 ## Two different credentials

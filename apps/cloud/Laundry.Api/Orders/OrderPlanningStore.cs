@@ -46,6 +46,19 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
         return await query.OrderBy(x => x.PlannedReceivingDate).ThenBy(x => x.Id).Take(limit + 1).ToArrayAsync(cancellationToken);
     }
 
+    public async Task<OrderHistoryEntry[]> ReadHistoryAsync(OrderPlanningScope scope, Guid orderId, int limit,
+        long afterVersion = 0, CancellationToken ct = default)
+    {
+        await AuthorizeAsync(scope, OrderPlanningPermissions.Read, ct);
+        if (limit is < 1 or > 100 || afterVersion < 0) throw new OrderPlanningException("invalid_order_history_query");
+        await using var db = new OrderDbContext(options);
+        if (!await db.Orders.AnyAsync(x => x.TenantId == scope.TenantId && x.PlantId == scope.PlantId && x.Id == orderId, ct))
+            throw new OrderPlanningException("order_not_found");
+        var rows = await db.AuditEntries.AsNoTracking().Where(x => x.TenantId == scope.TenantId && x.PlantId == scope.PlantId &&
+            x.OrderId == orderId && x.OrderVersion > afterVersion).OrderBy(x => x.OrderVersion).Take(limit + 1).ToArrayAsync(ct);
+        return rows.Select(OrderHistoryEntry.From).ToArray();
+    }
+
     private async Task<OrderPlanningReceipt> SaveAsync(OrderPlanningScope scope, Guid key, Guid? orderId,
         long? expectedVersion, OrderPlan input, CancellationToken ct)
     {
@@ -164,6 +177,7 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
                 RecordedAtUtc = now,
                 ActorIssuer = scope.ActorIssuer,
                 ActorSubject = scope.ActorSubject,
+                ActorDisplayName = access.ActorDisplayName,
                 RequestId = key,
                 BeforePlan = before is null ? null : JsonSerializer.Serialize(before, JsonOptions),
                 AfterPlan = JsonSerializer.Serialize(plan, JsonOptions)

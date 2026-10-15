@@ -16,6 +16,14 @@ public static class ManagementAuthentication
     public const string OidcScheme = "ManagementOidc";
     public const string Policy = "ManagementHumanSession";
     public const string SessionMarker = "laundry_management_session";
+    public const string AccountNameClaim = "laundry_management_account_name";
+
+    public static string? SafeAccountName(string? value)
+    {
+        var name = value?.Trim();
+        return string.IsNullOrWhiteSpace(name) || name.Length > 200 || name.Any(char.IsControl) ? null : name;
+    }
+
     public const string CallbackPath = "/management/signin-oidc";
     private const string ExpectedOrigin = "https://localhost:7100";
     public static readonly TimeSpan SessionLifetime = TimeSpan.FromMinutes(15);
@@ -76,7 +84,8 @@ public static class ManagementAuthentication
                 options.MapInboundClaims = false;
                 // OnTokenValidated below owns the minimal session identity. The default
                 // claim actions run afterward, delete "iss", and can remap profile data.
-                // Preserve our validated issuer/subject without reintroducing token claims.
+                // Preserve our validated identity and one bounded account-name snapshot,
+                // without reintroducing unrelated token claims.
                 options.ClaimActions.Clear();
                 options.SaveTokens = false;
                 options.GetClaimsFromUserInfoEndpoint = false;
@@ -85,6 +94,7 @@ public static class ManagementAuthentication
                 options.RemoteAuthenticationTimeout = TimeSpan.FromMinutes(5);
                 options.Scope.Clear();
                 options.Scope.Add("openid");
+                options.Scope.Add("profile");
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidIssuer = issuer,
@@ -115,11 +125,16 @@ public static class ManagementAuthentication
 
                     // Rebuild with only server-owned provenance and necessary stable identity.
                     // Incoming token role/permission/scope/marker claims do not grant application access.
+                    var accountNames = context.Principal.FindAll("preferred_username").ToArray();
+                    var accountName = accountNames.Length == 1 && accountNames[0].ValueType == ClaimValueTypes.String
+                        ? SafeAccountName(accountNames[0].Value) : null;
                     context.Principal = new ClaimsPrincipal(new ClaimsIdentity([
                         new Claim("iss", issuer), new Claim("sub", subjects[0].Value),
                         new Claim(ClaimTypes.NameIdentifier, subjects[0].Value),
                         new Claim(SessionMarker, "interactive")
                     ], CookieScheme));
+                    if (accountName is not null)
+                        ((ClaimsIdentity)context.Principal.Identity!).AddClaim(new Claim(AccountNameClaim, accountName));
                     context.Properties ??= new AuthenticationProperties();
                     context.Properties.IsPersistent = false;
                     context.Properties.AllowRefresh = false;

@@ -34,6 +34,11 @@ namespace Laundry.Api.Orders.Migrations
                         .HasColumnType("text")
                         .HasColumnName("action");
 
+                    b.Property<string>("ActorDisplayName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("actor_display_name");
+
                     b.Property<string>("ActorIssuer")
                         .IsRequired()
                         .HasColumnType("text")

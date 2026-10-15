@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Laundry.Api.Orders;
 
-public static class DevelopmentOrderEndpoints
+public static partial class DevelopmentOrderEndpoints
 {
     public static bool Enabled(IConfiguration configuration, IHostEnvironment environment) =>
         ManagementSessionAccess.Enabled(configuration, environment) && configuration.GetValue<bool>("Customers:Enabled") &&
@@ -47,6 +47,7 @@ public static class DevelopmentOrderEndpoints
     public static void MapDevelopmentOrderPlanning(this WebApplication app)
     {
         if (!Enabled(app.Configuration, app.Environment)) return;
+        MapHistory(app);
         app.MapGet("/api/v1/plants/{plantId:guid}/orders", async (Guid plantId, HttpContext http,
             ManagementAccessStore memberships, DbContextOptions<OrderDbContext> orderOptions,
             DbContextOptions<ManagementAccessDbContext> membershipOptions, DbContextOptions<CustomerDbContext> customerOptions,

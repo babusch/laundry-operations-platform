@@ -17,7 +17,7 @@
   ],
   "webOrigins": [],
   "defaultClientScopes": [],
-  "optionalClientScopes": [],
+  "optionalClientScopes": ["profile"],
   "attributes": {
     "pkce.code.challenge.method": "S256"
   }

@@ -38,6 +38,7 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
             .HasPrincipalKey(x => new { x.TenantId, x.PlantId, x.Id }).OnDelete(DeleteBehavior.Restrict);
         audit.Property(x => x.BeforePlan).HasColumnType("jsonb");
         audit.Property(x => x.AfterPlan).HasColumnType("jsonb");
+        audit.Property(x => x.ActorDisplayName).HasMaxLength(200);
 
         var receipt = modelBuilder.Entity<OrderCommandReceipt>();
         receipt.ToTable("command_receipts", "orders");

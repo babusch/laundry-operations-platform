@@ -30,6 +30,8 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 
 ## Identity principles
 
+Management audit identity: stable verified issuer/subject identify the person. The approved order-history display additionally snapshots a bounded verified account name from that person's login when a create/change commits. This mutable, potentially nonunique name is display metadata, never authorization or a replacement for stable identity. Old/unavailable names remain null; current account names do not rewrite historical evidence. See [order history setup](ORDER_HISTORY_SETUP.md).
+
 ### Station identity and operational purpose
 
 Approved by the user on 2026-09-08: keep station identity stable while making operational purpose configurable. Support dedicated stations, flexible stations with a choice of permitted operations, and stations with a default operation that can be switched. Available operations depend on plant configuration, applicable user permissions, and hardware capabilities.

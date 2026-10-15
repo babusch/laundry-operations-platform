@@ -3,7 +3,7 @@ info:
   title: Development planned-order planning
   version: 1.0.0
   description: >-
-    Opt-in loopback HTTPS management proof. Creation, details, unfiltered lists and planned updates are implemented.
+    Opt-in loopback HTTPS management proof. Creation, details, unfiltered lists, planned updates and history reads are implemented.
     No production rollout, receiving, or dispatch is implied.
 servers:
   - url: https://localhost:7100
@@ -305,6 +305,62 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /api/v1/plants/{plantId}/orders/{orderId}/history:
+    get:
+      operationId: getOrderHistory
+      summary: Read the creation and planning-change history of one authorized order
+      description: >-
+        Requires current orders.read and exactly one active tenant assignment for the plant.
+        Returns append-only evidence in ascending version order, not timestamp order.
+        Creation includes the initial five-field plan; edits include only changed fields.
+        Actor display name is the verified account name captured at acceptance, or null
+        when unavailable. Never infer a name from a raw issuer/subject. These identifiers,
+        audit IDs, request keys and receipt internals are not returned. Customer deactivation
+        does not hide history. No CSRF/idempotency header required; reads make no writes
+        and responses are no-store. Cursors bind tenant, plant, order and limit; keep the
+        limit unchanged. New committed versions may appear on continuation; this is not
+        a frozen snapshot. Unknown/duplicate query parameters are rejected; no filters yet.
+      security:
+        - managementSession: []
+      parameters:
+        - name: plantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          description: Protected continuation; use nextCursor unchanged and URL-encoded.
+          schema: { type: string, minLength: 1, maxLength: 2048 }
+      responses:
+        '200':
+          description: Bounded public history with nextCursor, or null at the end.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderHistoryPage'
+        '400':
+          description: invalid_order_history_query; invalid, duplicate or unsupported query/cursor.
+        '401':
+          description: Valid human management session required; gateway credentials are insufficient.
+        '403':
+          description: Current permission/scope denied or transport rejected.
+        '404':
+          description: Order absent from authorized scope, feature disabled, or outside Development.
+        '409':
+          description: plant_scope_ambiguous; multiple tenant assignments for this plant.
+        '503':
+          description: order_history_unavailable; safe retry after storage recovery.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
 components:
   securitySchemes:
     managementSession:
@@ -318,6 +374,62 @@ components:
       name: X-Management-CSRF
       description: Request token from /management/antiforgery with its same-session antiforgery cookie.
   schemas:
+    OrderHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/OrderHistoryEntry'
+        nextCursor:
+          type: [string, 'null']
+    OrderHistoryEntry:
+      type: object
+      additionalProperties: false
+      required: [version, action, recordedAtUtc, actorDisplayName, initialPlan, changes]
+      properties:
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        action:
+          type: string
+          enum: [order_created, order_plan_changed]
+        recordedAtUtc:
+          type: string
+          format: date-time
+        actorDisplayName:
+          type: [string, 'null']
+          maxLength: 200
+          description: Verified account-name snapshot; null means unavailable, never a guessed name.
+        initialPlan:
+          description: Creation only; null for planning changes.
+          anyOf:
+            - $ref: '#/components/schemas/UpdateOrderPlan'
+            - type: 'null'
+        changes:
+          type: array
+          maxItems: 5
+          description: Empty for creation; only changed fields for a plan change.
+          items:
+            $ref: '#/components/schemas/OrderPlanChange'
+    OrderPlanChange:
+      type: object
+      additionalProperties: false
+      required: [field, before, after]
+      properties:
+        field:
+          type: string
+          enum: [customerId, plannedReceivingDate, plannedDeliveryDate, customerReference, notes]
+        before:
+          type: [string, 'null']
+          description: Previous value; customer ID is a UUID string, dates are YYYY-MM-DD, text may be null.
+        after:
+          type: [string, 'null']
+          description: New value with the same representation as before.
     OrderList:
       type: object
       additionalProperties: false

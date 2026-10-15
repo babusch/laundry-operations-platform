@@ -26,6 +26,8 @@ public sealed record OrderPlanningScope(Guid TenantId, Guid PlantId, string Acto
 // There is deliberately no permissive production implementation or API registration in this slice.
 public interface IOrderPlanningAccess
 {
+    // Server-verified display metadata only; never an authorization or retry identity.
+    string? ActorDisplayName => null;
     Task<bool> IsAllowedAsync(OrderPlanningScope scope, string permission, CancellationToken cancellationToken);
     Task<bool> IsCustomerEligibleAsync(OrderPlanningScope scope, Guid customerId, CancellationToken cancellationToken);
 }
@@ -87,6 +89,7 @@ public sealed class OrderAuditEntry
     public DateTimeOffset RecordedAtUtc { get; set; }
     public string ActorIssuer { get; set; } = "";
     public string ActorSubject { get; set; } = "";
+    public string? ActorDisplayName { get; set; }
     public Guid RequestId { get; set; }
     public string? BeforePlan { get; set; }
     public string AfterPlan { get; set; } = "";

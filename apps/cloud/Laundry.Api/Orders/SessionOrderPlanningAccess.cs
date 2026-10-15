@@ -12,6 +12,7 @@ public sealed class SessionOrderPlanningAccess(ManagementActor actor,
     DbContextOptions<ManagementAccessDbContext> membershipOptions,
     DbContextOptions<CustomerDbContext> customerOptions) : ITransactionalOrderPlanningAccess
 {
+    public string? ActorDisplayName => ManagementAuthentication.SafeAccountName(actor.DisplayName);
     private ManagementAccessDbContext? _memberships;
     private CustomerDbContext? _customers;
     private OrderPlanningScope? _boundScope;

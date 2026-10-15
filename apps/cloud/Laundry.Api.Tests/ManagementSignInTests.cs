@@ -39,6 +39,33 @@ public sealed class ManagementSignInTests : IDisposable
     private string? _verifier;
     private string _challenge = "";
     private string _parState = "";
+    private string? _accountName = "synthetic-manager";
+    private bool _duplicateAccountName;
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("   ", false)]
+    [InlineData("control\nname", false)]
+    [InlineData("long", false)]
+    [InlineData("ambiguous", true)]
+    public async Task AccountName_MissingInvalidOrAmbiguousProfileDoesNotInventNameOrTrustIncomingMarker(string? name, bool duplicate)
+    {
+        _accountName = name == "long" ? new string('x', 201) : name;
+        _duplicateAccountName = duplicate;
+        await using var app = Application();
+        using var client = Client(app);
+        using var callback = await LoginAsync(client);
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        var cookie = callback.Headers.GetValues("Set-Cookie").Single(x => x.StartsWith("__Host-laundry-management=", StringComparison.Ordinal));
+        var encoded = cookie.Split(';')[0].Split('=', 2)[1];
+        var options = app.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>().Get(ManagementAuthentication.CookieScheme);
+        var ticket = options.TicketDataFormat.Unprotect(Uri.UnescapeDataString(encoded));
+        Assert.NotNull(ticket);
+        Assert.DoesNotContain(ticket.Principal.Claims, x => x.Type == ManagementAuthentication.AccountNameClaim);
+        Assert.True(ManagementSessionAccess.TryReadActor(AuthenticateResult.Success(ticket), Issuer, out var actor));
+        Assert.Null(actor!.DisplayName);
+        Assert.Equal(4, ticket.Principal.Claims.Count());
+    }
 
     [Theory]
     [InlineData("Development", false)]
@@ -95,7 +122,7 @@ public sealed class ManagementSignInTests : IDisposable
         Assert.Equal("code", query["response_type"]);
         Assert.Equal("S256", query["code_challenge_method"]);
         Assert.Equal("form_post", query["response_mode"]);
-        Assert.Equal("openid", query["scope"]);
+        Assert.Equal("openid profile", query["scope"]);
         Assert.Equal("login", query["prompt"]);
         Assert.Equal("https://localhost:7100" + ManagementAuthentication.CallbackPath, query["redirect_uri"]);
         Assert.DoesNotContain("synthetic-client-secret", login.Headers.Location.ToString());
@@ -148,7 +175,9 @@ public sealed class ManagementSignInTests : IDisposable
         Assert.True(ManagementSessionAccess.TryReadActor(AuthenticateResult.Success(ticket), Issuer, out var actor));
         Assert.Equal("synthetic-person", actor!.Subject);
         Assert.DoesNotContain(ticket.Principal.Claims, claim => claim.Type is "name" or "email");
-        Assert.Equal(4, ticket.Principal.Claims.Count());
+        Assert.Equal("synthetic-manager", actor.DisplayName);
+        Assert.Equal("synthetic-manager", ticket.Principal.FindFirstValue(ManagementAuthentication.AccountNameClaim));
+        Assert.Equal(5, ticket.Principal.Claims.Count());
     }
 
     [Theory]
@@ -271,6 +300,11 @@ public sealed class ManagementSignInTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, updatedOrder.StatusCode);
         Assert.Equal(2, (await updatedOrder.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("version").GetInt64());
         Assert.Equal("synthetic-person", (await orderDatabase.AuditEntries.SingleAsync(x => x.Action == "order_plan_changed")).ActorSubject);
+        Assert.All(await orderDatabase.AuditEntries.ToArrayAsync(), entry => Assert.Equal("synthetic-manager", entry.ActorDisplayName));
+        var history = await client.GetFromJsonAsync<JsonElement>(createdOrder.Headers.Location + "/history");
+        Assert.Equal(2, history.GetProperty("items").GetArrayLength());
+        Assert.Equal("synthetic-manager", history.GetProperty("items")[1].GetProperty("actorDisplayName").GetString());
+        Assert.DoesNotContain("synthetic-person", history.GetRawText());
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{Guid.NewGuid():D}/plants/{member.PlantId:D}/customers")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/management/tenants/{member.TenantId:D}/plants/{Guid.NewGuid():D}/customers")).StatusCode);
         await database.Database.ExecuteSqlRawAsync("DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.read'");
@@ -339,6 +373,7 @@ public sealed class ManagementSignInTests : IDisposable
         Assert.Equal("https://localhost:7100" + ManagementAuthentication.CallbackPath, redirect.GetString());
         Assert.Empty(client.GetProperty("webOrigins").EnumerateArray());
         Assert.Empty(client.GetProperty("defaultClientScopes").EnumerateArray());
+        Assert.Equal("profile", Assert.Single(client.GetProperty("optionalClientScopes").EnumerateArray()).GetString());
     }
 
     [Fact]
@@ -523,9 +558,12 @@ public sealed class ManagementSignInTests : IDisposable
             new("laundry_permissions", "scans.ingest"),
             new("name", "Synthetic profile name"),
             new("email", "synthetic@example.test"),
+            new(ManagementAuthentication.AccountNameClaim, "Forged token marker"),
             new("iat", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64)
         };
         if (_failure != "subject") claims.Add(new Claim("sub", "synthetic-person"));
+        if (_accountName is not null) claims.Add(new Claim("preferred_username", _accountName));
+        if (_duplicateAccountName) claims.Add(new Claim("preferred_username", "ambiguous-name"));
         var now = DateTime.UtcNow;
         using var otherKey = RSA.Create(2048);
         return new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(

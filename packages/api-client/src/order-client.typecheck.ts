@@ -19,3 +19,14 @@ type Headers = operations["updatePlannedOrder"]["parameters"]["header"];
 type VersionIsRequired = Assert<
   Omit<Headers, "If-Match"> extends Headers ? false : true
 >;
+
+type History = components["schemas"]["OrderHistoryEntry"];
+type MissingHistoryNameIsRepresentable = Assert<
+  null extends History["actorDisplayName"] ? true : false
+>;
+type NoRawHistoryIdentity = Assert<
+  "actorSubject" extends keyof History ? false : true
+>;
+type HistoryChangesPermitClearing = Assert<
+  null extends components["schemas"]["OrderPlanChange"]["after"] ? true : false
+>;

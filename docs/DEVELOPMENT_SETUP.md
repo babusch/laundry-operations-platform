@@ -4,6 +4,8 @@ For one bookmarked entry point to sign in and view saved orders, see [Developmen
 
 This guide describes the supported local development environment. Keep it updated whenever a required tool or the primary setup commands change.
 
+History upgrade prerequisite (2026-10-15): before running the new management API build, explicitly apply the additive `OrderAuditAccountName` migration through the existing order-storage helper. Fresh account-name capture also requires the optional Keycloak `profile` client scope. Neither live change is automatic; follow [order history setup](ORDER_HISTORY_SETUP.md). Existing data is preserved and no history UI is enabled yet.
+
 ## What each tool does
 
 | Tool | Purpose in this repository |

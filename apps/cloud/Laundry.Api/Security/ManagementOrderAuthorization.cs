@@ -14,7 +14,7 @@ public enum ManagementActorKind
 // Trusted inputs to a pure authorization rule, NOT a login/session or proof of authentication.
 // The future authentication adapter must validate issuer, audience, expiry, signature/session,
 // and human client provenance before constructing this actor. Never bind it from request JSON.
-public sealed record ManagementActor(string Issuer, string Subject, ManagementActorKind Kind, bool IsAuthenticated);
+public sealed record ManagementActor(string Issuer, string Subject, ManagementActorKind Kind, bool IsAuthenticated, string? DisplayName = null);
 
 // Application-owned access data, not caller-asserted scope or unchecked token role names.
 // Keep permission and plant together so access to one plant cannot leak into another.

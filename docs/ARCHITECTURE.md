@@ -40,7 +40,7 @@ flowchart LR
 
 ## Cloud application
 
-The Development API temporarily serves a small server-rendered management navigation bridge at `/management` (sign-in/status and read-only order browsing). It reuses the existing named human cookie, order access seam, and loopback HTTPS boundary. This adds no service/dependency and does not replace the Next.js management application or approve production HTML hosting. See [navigation setup](MANAGEMENT_NAVIGATION_SETUP.md).
+The Development API temporarily serves a small server-rendered management bridge at `/management` (sign-in/status, order browsing and planned creation/editing). The protected order API also exposes read-only history; its page remains deferred. The bridge reuses the existing named human cookie, order access seam, and loopback HTTPS boundary. This adds no service/dependency and does not replace the Next.js management application or approve production HTML hosting. See [navigation setup](MANAGEMENT_NAVIGATION_SETUP.md) and [history setup](ORDER_HISTORY_SETUP.md).
 
 Use a modular monolith with explicit modules:
 

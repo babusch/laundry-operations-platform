@@ -22,6 +22,7 @@ public static partial class DevelopmentManagementPages
         app.MapGet("/management", (Delegate)((HttpContext http) => Render(app, http, null, null)));
         app.MapGet("/management/orders/{plantId:guid}", (Guid plantId, HttpContext http) => Render(app, http, plantId, null));
         app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}", (Guid plantId, Guid orderId, HttpContext http) => Render(app, http, plantId, orderId));
+        app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}/history", (Guid plantId, Guid orderId, HttpContext http) => Render(app, http, plantId, orderId, history: true));
         app.MapGet("/management/orders/{plantId:guid}/new", (Guid plantId, HttpContext http) => CreatePage(app, http, plantId));
         app.MapPost("/management/orders/{plantId:guid}/new", (Guid plantId, HttpContext http) => CreatePage(app, http, plantId));
         app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}/edit", (Guid plantId, Guid orderId, HttpContext http) => CreatePage(app, http, plantId, orderId));
@@ -38,8 +39,9 @@ public static partial class DevelopmentManagementPages
         });
     }
 
-    private static async Task<IResult> Render(WebApplication app, HttpContext http, Guid? plantId, Guid? orderId)
+    private static async Task<IResult> Render(WebApplication app, HttpContext http, Guid? plantId, Guid? orderId, bool history = false)
     {
+        if (history && !DevelopmentOrderEndpoints.Enabled(app.Configuration, app.Environment)) return Results.NotFound();
         var lang = http.Request.Query["lang"].ToString();
         if (lang is not ("sv" or "en")) lang = http.Request.Cookies["laundry-management-language"] ??
             (http.Request.Headers.AcceptLanguage.ToString().StartsWith("sv", StringComparison.OrdinalIgnoreCase) ? "sv" : "en");
@@ -49,7 +51,7 @@ public static partial class DevelopmentManagementPages
         string T(string en, string sv) => lang == "sv" ? sv : en;
         var session = await http.AuthenticateAsync(ManagementAuthentication.CookieScheme);
         var signedIn = ManagementSessionAccess.TryReadActor(session, app.Configuration["ManagementAuthentication:Authority"]!.TrimEnd('/'), out var actor);
-        var title = orderId.HasValue ? T("Order details", "Orderdetaljer") : plantId.HasValue ? T("Orders", "Ordrar") : T("Management", "Administration");
+        var title = history ? T("Order history", "Orderhistorik") : orderId.HasValue ? T("Order details", "Orderdetaljer") : plantId.HasValue ? T("Orders", "Ordrar") : T("Management", "Administration");
         var content = new StringBuilder();
         var status = 200;
         if (!signedIn)
@@ -93,14 +95,22 @@ public static partial class DevelopmentManagementPages
                         string Date(DateOnly date) => H(date.ToString("d MMM yyyy", culture));
                         if (orderId.HasValue)
                         {
-                            content.Append($"<a class=back href='/management/orders/{plantId:D}'>← {T("All orders", "Alla ordrar")}</a>");
+                            if (!history) content.Append($"<a class=back href='/management/orders/{plantId:D}'>← {T("All orders", "Alla ordrar")}</a>");
                             var order = await store.GetAsync(scope, orderId.Value, http.RequestAborted);
                             if (order is null) { status = 404; content.Append(Alert(T("Order not found in this plant.", "Ordern hittades inte i den här anläggningen."))); }
+                            else if (history)
+                            {
+                                var result = await RenderHistory(http, lang, scope, order, store);
+                                status = result.Status;
+                                content.Append(result.Content);
+                            }
                             else
                             {
                                 content.Append($"<section class=panel><div class=section-head><h2>{H(order.OrderNumber)}</h2><span class=badge>{T("Planned", "Planerad")}</span></div><dl class=dates><div><dt>{T("Planned receiving", "Planerad inleverans")}</dt><dd>{Date(order.PlannedReceivingDate)}</dd></div><div><dt>{T("Planned delivery", "Planerad leverans")}</dt><dd>{Date(order.PlannedDeliveryDate)}</dd></div></dl><dl><dt>{T("Customer reference", "Kundreferens")}</dt><dd>{H(order.CustomerReference ?? "—")}</dd><dt>{T("Notes", "Anteckningar")}</dt><dd class=notes>{H(order.Notes ?? "—")}</dd><dt>{T("Version", "Version")}</dt><dd>{order.Version}</dd></dl></section>");
+                                content.Append("<p class=actions>");
                                 if (order.Status == "planned" && matches[0].Permissions.Contains(OrderPlanningPermissions.EditPlan, StringComparer.Ordinal))
-                                    content.Append($"<p><a class=button href='/management/orders/{plantId:D}/{order.Id:D}/edit'>{T("Edit order", "Redigera order")}</a></p>");
+                                    content.Append($"<a class=button href='/management/orders/{plantId:D}/{order.Id:D}/edit'>{T("Edit order", "Redigera order")}</a>");
+                                content.Append($"<a class=button href='/management/orders/{plantId:D}/{order.Id:D}/history'>{T("View history", "Visa historik")}</a></p>");
                             }
                         }
                         else
@@ -137,6 +147,8 @@ public static partial class DevelopmentManagementPages
             { status = 503; content.Append(Alert(T("Saved orders are temporarily unavailable. Nothing has been changed. Try this page again.", "Sparade ordrar är tillfälligt otillgängliga. Inget har ändrats. Försök öppna sidan igen."))); }
             catch (OrderPlanningException)
             { status = 403; content.Append(Alert(T("You no longer have permission to view these orders.", "Du har inte längre behörighet att visa dessa ordrar."))); }
+            catch (System.Text.Json.JsonException) when (history)
+            { status = 503; content.Append(Alert(T("Order history is temporarily unavailable. Nothing has been changed.", "Orderhistoriken är tillfälligt otillgänglig. Inget har ändrats."))); }
         }
         return Page(http, lang, signedIn, title, content.ToString(), status);
     }
@@ -168,6 +180,7 @@ public static partial class DevelopmentManagementPages
     private static string H(string value) => WebUtility.HtmlEncode(value);
     private static string Alert(string text, bool warning = false) => $"<div class='{(warning ? "alert warning" : "alert")}' role=alert><strong>! </strong>{H(text)}</div>";
     private const string Adjustments = """
+        .history-list{list-style:none;padding:0;margin:1.5rem 0;display:grid;gap:1.25rem}.history-entry{border:1px solid #42666f;border-radius:.75rem;padding:1.25rem;min-width:0}.history-entry h3{font-size:1.1rem;margin:0}.history-meta{display:flex;gap:.5rem 1.5rem;flex-wrap:wrap;font-size:.9rem;font-variant-numeric:tabular-nums}.history-meta span{overflow-wrap:anywhere}.initial-plan{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 1.5rem;margin:0}.initial-plan>div:last-child{grid-column:1/-1}.history-change{border-top:1px solid #244A53;padding-top:1rem;margin-top:1rem}.history-change h4{margin:0;font-size:1rem}.change-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem;margin:0}.change-values dt{margin-top:.5rem}.history-value{white-space:pre-wrap;overflow-wrap:anywhere}.change-values>div{min-width:0}@media(max-width:48rem){.change-values,.initial-plan{grid-template-columns:1fr;gap:.75rem}.history-entry{padding:1rem}}
         .alert{border-color:#DD6C65;background:#30201f}
         .alert.warning{border-color:#D4A84F;background:#302a1a}
         .latest-plan{border:2px solid #D4A84F;border-radius:.75rem;padding:1rem;margin:1.5rem 0;background:#302a1a}.latest-plan h3{font-size:1.1rem;margin:0}.latest-plan dd{color:#DCE9E7}

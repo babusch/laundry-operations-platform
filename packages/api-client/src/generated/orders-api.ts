@@ -68,10 +68,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plants/{plantId}/orders/{orderId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the creation and planning-change history of one authorized order
+         * @description Requires current orders.read and exactly one active tenant assignment for the plant. Returns append-only evidence in ascending version order, not timestamp order. Creation includes the initial five-field plan; edits include only changed fields. Actor display name is the verified account name captured at acceptance, or null when unavailable. Never infer a name from a raw issuer/subject. These identifiers, audit IDs, request keys and receipt internals are not returned. Customer deactivation does not hide history. No CSRF/idempotency header required; reads make no writes and responses are no-store. Cursors bind tenant, plant, order and limit; keep the limit unchanged. New committed versions may appear on continuation; this is not a frozen snapshot. Unknown/duplicate query parameters are rejected; no filters yet.
+         */
+        get: operations["getOrderHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OrderHistoryPage: {
+            items: components["schemas"]["OrderHistoryEntry"][];
+            nextCursor: string | null;
+        };
+        OrderHistoryEntry: {
+            /** Format: int64 */
+            version: number;
+            /** @enum {string} */
+            action: "order_created" | "order_plan_changed";
+            /** Format: date-time */
+            recordedAtUtc: string;
+            /** @description Verified account-name snapshot; null means unavailable, never a guessed name. */
+            actorDisplayName: string | null;
+            /** @description Creation only; null for planning changes. */
+            initialPlan: components["schemas"]["UpdateOrderPlan"] | null;
+            /** @description Empty for creation; only changed fields for a plan change. */
+            changes: components["schemas"]["OrderPlanChange"][];
+        };
+        OrderPlanChange: {
+            /** @enum {string} */
+            field: "customerId" | "plannedReceivingDate" | "plannedDeliveryDate" | "customerReference" | "notes";
+            /** @description Previous value; customer ID is a UUID string, dates are YYYY-MM-DD, text may be null. */
+            before: string | null;
+            /** @description New value with the same representation as before. */
+            after: string | null;
+        };
         OrderList: {
             items: components["schemas"]["Order"][];
             /** @description Protected continuation token, or null on the last page. */
@@ -483,6 +529,77 @@ export interface operations {
                 content?: never;
             };
             /** @description order_storage_unavailable; retry the exact body/key/precondition after recovery. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getOrderHistory: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Protected continuation; use nextCursor unchanged and URL-encoded. */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                plantId: string;
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded public history with nextCursor, or null at the end. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderHistoryPage"];
+                };
+            };
+            /** @description invalid_order_history_query; invalid, duplicate or unsupported query/cursor. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Valid human management session required; gateway credentials are insufficient. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current permission/scope denied or transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Order absent from authorized scope, feature disabled, or outside Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description plant_scope_ambiguous; multiple tenant assignments for this plant. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description order_history_unavailable; safe retry after storage recovery. */
             503: {
                 headers: {
                     [name: string]: unknown;
