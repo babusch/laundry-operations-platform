@@ -161,6 +161,83 @@ namespace Laundry.Api.Orders.Migrations
                     b.ToTable("command_receipts", "orders");
                 });
 
+            modelBuilder.Entity("Laundry.Api.Orders.OrderNotesDefault", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<bool>("NotesVisibleToOperators")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notes_visible_to_operators");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("TenantId", "PlantId");
+
+                    b.ToTable("note_defaults", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_note_default_version", "version > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Laundry.Api.Orders.OrderNotesDefaultCommand", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<string>("ActorIssuer")
+                        .HasColumnType("text")
+                        .HasColumnName("actor_issuer");
+
+                    b.Property<string>("ActorSubject")
+                        .HasColumnType("text")
+                        .HasColumnName("actor_subject");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<bool>("AfterVisible")
+                        .HasColumnType("boolean")
+                        .HasColumnName("after_visible");
+
+                    b.Property<bool>("BeforeVisible")
+                        .HasColumnType("boolean")
+                        .HasColumnName("before_visible");
+
+                    b.Property<long>("ExpectedVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("expected_version");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.Property<long>("ResultVersion")
+                        .HasColumnType("bigint")
+                        .HasColumnName("result_version");
+
+                    b.HasKey("TenantId", "PlantId", "ActorIssuer", "ActorSubject", "IdempotencyKey");
+
+                    b.ToTable("note_default_commands", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_note_default_command_versions", "expected_version >= 0 AND result_version > 0");
+                        });
+                });
+
             modelBuilder.Entity("Laundry.Api.Orders.OrderNumberCounter", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -214,6 +291,10 @@ namespace Laundry.Api.Orders.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("notes");
+
+                    b.Property<bool>("NotesVisibleToOperators")
+                        .HasColumnType("boolean")
+                        .HasColumnName("notes_visible_to_operators");
 
                     b.Property<string>("OrderNumber")
                         .IsRequired()
@@ -296,6 +377,15 @@ namespace Laundry.Api.Orders.Migrations
                         .WithMany()
                         .HasForeignKey("TenantId", "PlantId", "OrderId")
                         .HasPrincipalKey("TenantId", "PlantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Laundry.Api.Orders.OrderNotesDefaultCommand", b =>
+                {
+                    b.HasOne("Laundry.Api.Orders.OrderNotesDefault", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PlantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

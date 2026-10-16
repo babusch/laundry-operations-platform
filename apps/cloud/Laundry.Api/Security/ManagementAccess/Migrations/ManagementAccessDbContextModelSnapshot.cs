@@ -131,7 +131,7 @@ namespace Laundry.Api.Security.ManagementAccess.Migrations
 
                     b.ToTable("plant_membership_permissions", "identity_access", t =>
                         {
-                            t.HasCheckConstraint("ck_membership_permission", "permission IN ('orders.read', 'orders.create', 'orders.plan.edit')");
+                            t.HasCheckConstraint("ck_membership_permission", "permission IN ('orders.read', 'orders.create', 'orders.plan.edit', 'orders.notes.default.edit')");
                         });
                 });
 

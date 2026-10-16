@@ -107,6 +107,8 @@ Order history in the Development management bridge uses chronological versioned 
 
 ## UI completion checklist
 
+Order-note visibility history uses explicit translated Shown/Hidden/Not recorded text, not color-only state. Missing legacy evidence is not presented as hidden. Keep notes and visibility metadata full width within the initial plan and use existing Before/After comparisons for changes. Create/edit controls use labeled native Shown/Hidden selects below notes, with symmetric chevron spacing and contextual help: creation saves the displayed choice, editing uses the saved choice. Current details show visibility in the existing metadata panel. The separate default page explains that existing orders are unchanged, is read-only without its explicit edit permission, and retains pending choices during language changes/errors. Stale values require review without saving; uncertain retries disable/mirror the original control. Outage reload is a non-saving action. No animation, light theme or separate phone workflow is added.
+
 - The common task is obvious without explanation.
 - The screen answers: Where am I? What is selected? What happens next? How do I leave or recover?
 - Loading, empty, offline, queued, synchronized, rejected, unauthorized, and unexpected-error states are designed.

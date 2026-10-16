@@ -9,6 +9,8 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
     public DbSet<OrderAuditEntry> AuditEntries => Set<OrderAuditEntry>();
     public DbSet<OrderCommandReceipt> CommandReceipts => Set<OrderCommandReceipt>();
     public DbSet<OrderNumberCounter> NumberCounters => Set<OrderNumberCounter>();
+    public DbSet<OrderNotesDefault> NotesDefaults => Set<OrderNotesDefault>();
+    public DbSet<OrderNotesDefaultCommand> NotesDefaultCommands => Set<OrderNotesDefaultCommand>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +54,18 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
         counter.ToTable("number_counters", "orders");
         counter.HasKey(x => new { x.TenantId, x.PlantId });
 
+        var defaults = modelBuilder.Entity<OrderNotesDefault>();
+        defaults.ToTable("note_defaults", "orders", table => table.HasCheckConstraint("ck_note_default_version", "version > 0"));
+        defaults.HasKey(x => new { x.TenantId, x.PlantId });
+        defaults.Property(x => x.Version).IsConcurrencyToken();
+        var command = modelBuilder.Entity<OrderNotesDefaultCommand>();
+        command.ToTable("note_default_commands", "orders", table =>
+        {
+            table.HasCheckConstraint("ck_note_default_command_versions", "expected_version >= 0 AND result_version > 0");
+        });
+        command.HasKey(x => new { x.TenantId, x.PlantId, x.ActorIssuer, x.ActorSubject, x.IdempotencyKey });
+        command.HasOne<OrderNotesDefault>().WithMany().HasForeignKey(x => new { x.TenantId, x.PlantId }).OnDelete(DeleteBehavior.Restrict);
+
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
         {
             foreach (var property in entity.GetProperties())
@@ -64,7 +78,7 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         if (ChangeTracker.Entries().Any(x =>
-                (x.Entity is OrderAuditEntry or OrderCommandReceipt) &&
+                (x.Entity is OrderAuditEntry or OrderCommandReceipt or OrderNotesDefaultCommand) &&
                 (x.State is EntityState.Modified or EntityState.Deleted)))
         {
             throw new InvalidOperationException("Order history and successful receipts are append-only.");

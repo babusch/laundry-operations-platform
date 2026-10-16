@@ -58,6 +58,7 @@ public sealed class ServiceOrder
     public DateOnly PlannedDeliveryDate { get; set; }
     public string? CustomerReference { get; set; }
     public string? Notes { get; set; }
+    public bool NotesVisibleToOperators { get; set; }
     public string Status { get; set; } = "planned";
     public long Version { get; set; } = 1;
     public DateTimeOffset CreatedAtUtc { get; set; }
@@ -120,4 +121,30 @@ public sealed class OrderNumberCounter
     public Guid TenantId { get; set; }
     public Guid PlantId { get; set; }
     public long LastNumber { get; set; }
+}
+
+// Order-module policy only, not a general plant configuration/catalog entity.
+public sealed class OrderNotesDefault
+{
+    public Guid TenantId { get; set; }
+    public Guid PlantId { get; set; }
+    public bool NotesVisibleToOperators { get; set; }
+    public long Version { get; set; }
+}
+
+public sealed record OrderNotesDefaultDetails(bool NotesVisibleToOperators, long Version);
+
+// Accepted setting commands are append-only audit evidence and exact retry receipts.
+public sealed class OrderNotesDefaultCommand
+{
+    public Guid TenantId { get; set; }
+    public Guid PlantId { get; set; }
+    public string ActorIssuer { get; set; } = "";
+    public string ActorSubject { get; set; } = "";
+    public Guid IdempotencyKey { get; set; }
+    public long ExpectedVersion { get; set; }
+    public bool BeforeVisible { get; set; }
+    public bool AfterVisible { get; set; }
+    public long ResultVersion { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; set; }
 }

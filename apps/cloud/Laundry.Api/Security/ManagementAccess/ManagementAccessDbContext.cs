@@ -56,7 +56,7 @@ public sealed class ManagementAccessDbContext(DbContextOptions<ManagementAccessD
 
         var permission = modelBuilder.Entity<PlantMembershipPermission>();
         permission.ToTable("plant_membership_permissions", "identity_access", table =>
-            table.HasCheckConstraint("ck_membership_permission", "permission IN ('orders.read', 'orders.create', 'orders.plan.edit')"));
+            table.HasCheckConstraint("ck_membership_permission", "permission IN ('orders.read', 'orders.create', 'orders.plan.edit', 'orders.notes.default.edit')"));
         permission.HasKey(x => new { x.MembershipId, x.Permission });
 
         var audit = modelBuilder.Entity<MembershipAuditEntry>();
@@ -67,8 +67,8 @@ public sealed class ManagementAccessDbContext(DbContextOptions<ManagementAccessD
         audit.Property(x => x.AfterState).HasColumnType("jsonb");
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
-        foreach (var property in entity.GetProperties())
-            property.SetColumnName(Regex.Replace(property.Name, "([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant());
+            foreach (var property in entity.GetProperties())
+                property.SetColumnName(Regex.Replace(property.Name, "([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant());
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

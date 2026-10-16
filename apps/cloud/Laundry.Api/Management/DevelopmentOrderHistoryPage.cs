@@ -40,10 +40,17 @@ public static partial class DevelopmentManagementPages
             "plannedDeliveryDate" => T("Planned delivery", "Planerad leverans"),
             "customerReference" => T("Customer reference", "Kundreferens"),
             "notes" => T("Notes", "Anteckningar"),
+            "notesVisibleToOperators" => T("Notes shown to operators", "Anteckningar visas för operatörer"),
             _ => throw new InvalidOperationException("Unknown history field.")
         };
         string Value(string field, string? value)
         {
+            if (field == "notesVisibleToOperators") return H(value switch
+            {
+                "true" => T("Shown", "Visas"),
+                "false" => T("Hidden", "Dolda"),
+                _ => T("Not recorded", "Ej registrerat")
+            });
             if (value is null) return H(T("Not set", "Ej angivet"));
             if (field == "customerId") return H(Guid.TryParse(value, out var id) && labels.TryGetValue(id, out var label)
                 ? label : T("Customer unavailable", "Kunden är inte tillgänglig"));
@@ -62,6 +69,7 @@ public static partial class DevelopmentManagementPages
                 html.Append("<dl class=initial-plan>");
                 foreach (var pair in new[] { ("customerId", initial.CustomerId.ToString()), ("plannedReceivingDate", initial.PlannedReceivingDate.ToString("yyyy-MM-dd")), ("plannedDeliveryDate", initial.PlannedDeliveryDate.ToString("yyyy-MM-dd")), ("customerReference", initial.CustomerReference), ("notes", initial.Notes) })
                     html.Append($"<div><dt>{Label(pair.Item1)}</dt><dd class=history-value>{Value(pair.Item1, pair.Item2)}</dd></div>");
+                html.Append($"<div><dt>{Label("notesVisibleToOperators")}</dt><dd class=history-value>{Value("notesVisibleToOperators", initial.NotesVisibleToOperators?.ToString().ToLowerInvariant())}</dd></div>");
                 html.Append("</dl>");
             }
             else

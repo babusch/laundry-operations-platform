@@ -8,6 +8,10 @@ The separate management `createOrderPlanningClient` and `src/generated/orders-ap
 
 The order client also describes `GET /api/v1/plants/{plantId}/orders/{orderId}/history`: current `orders.read`, ascending version pagination (default 25/max 100), order/scoped/limit-bound opaque cursor and no mutation headers. Creation includes `initialPlan`; changes include only changed fields. `actorDisplayName` is nullable verified display metadata; never substitute internal issuer/subject or invent a name. Reads have no writes and customer deactivation does not hide history. No history UI is implemented by this package.
 
+Order requests now accept optional boolean `notesVisibleToOperators`: omit on create to copy the plant default, omit on edit to preserve the stored choice, or explicitly send true/false. Null is invalid. Current order reads/new receipts include the choice; immutable old retry responses can omit it, meaning unknown in that receipt. Fetch current details instead of treating absence as false. History uses a separate `OrderHistoryPlan` with nullable recorded visibility; changed-field visibility is a literal `true`/`false` string or null for missing legacy evidence.
+
+`GET /api/v1/plants/{plantId}/orders/settings/notes` reads the default with `orders.read`. Its `PUT` requires separate `orders.notes.default.edit`, antiforgery, retained `Idempotency-Key`, and exact strong scoped `If-Match` from GET. An unconfigured default is hidden/version 0. Default changes affect only future creations. Keep the exact command on uncertain retries; old accepted results are not today's default. No permissions are granted by using this client.
+
 Regenerate and check the client from the repository root:
 
 ```powershell

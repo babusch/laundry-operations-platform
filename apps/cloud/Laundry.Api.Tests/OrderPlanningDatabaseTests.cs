@@ -8,7 +8,7 @@ using Testcontainers.PostgreSql;
 namespace Laundry.Api.Tests;
 
 [Trait("Category", "Database")]
-public sealed class OrderPlanningDatabaseTests : IAsyncLifetime
+public sealed partial class OrderPlanningDatabaseTests : IAsyncLifetime
 {
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.6-alpine3.23").Build();
     private readonly OrderPlanningScope _scope = new(Guid.NewGuid(), Guid.NewGuid(), "https://identity.example.test", "synthetic-manager");
@@ -260,9 +260,12 @@ public sealed class OrderPlanningDatabaseTests : IAsyncLifetime
     private sealed class TestAccess(OrderPlanningScope permittedScope, Guid customer) : IOrderPlanningAccess
     {
         public bool Allowed { get; set; } = true;
+        public bool CanEditNotesDefault { get; set; }
         public Guid? AdditionalCustomer { get; set; }
         public Task<bool> IsAllowedAsync(OrderPlanningScope scope, string permission, CancellationToken cancellationToken) =>
-            Task.FromResult(Allowed && scope == permittedScope && permission is "orders.create" or "orders.plan.edit" or "orders.read");
+            Task.FromResult(Allowed && scope == permittedScope &&
+                (permission is "orders.create" or "orders.plan.edit" or "orders.read" ||
+                 permission == OrderPlanningPermissions.EditNotesDefault && CanEditNotesDefault));
         public Task<bool> IsCustomerEligibleAsync(OrderPlanningScope scope, Guid customerId, CancellationToken cancellationToken) =>
             Task.FromResult(scope == permittedScope && (customerId == customer || customerId == AdditionalCustomer));
     }

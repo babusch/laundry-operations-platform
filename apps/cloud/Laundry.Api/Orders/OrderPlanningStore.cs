@@ -10,17 +10,18 @@ namespace Laundry.Api.Orders;
 
 // HTTP composition must supply verified human access and current customer eligibility.
 // Each operation owns a fresh context so a rejected/failed transaction cannot contaminate a retry.
-public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
+public sealed partial class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
     IOrderPlanningAccess access, TimeProvider timeProvider)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public Task<OrderPlanningReceipt> CreateAsync(OrderPlanningScope scope, Guid key, OrderPlan plan,
-        CancellationToken cancellationToken = default) => SaveAsync(scope, key, null, null, plan, cancellationToken);
+        CancellationToken cancellationToken = default, bool? notesVisibleToOperators = null) =>
+        SaveAsync(scope, key, null, null, plan, notesVisibleToOperators, cancellationToken);
 
     public Task<OrderPlanningReceipt> UpdateAsync(OrderPlanningScope scope, Guid key, Guid orderId,
-        long expectedVersion, OrderPlan plan, CancellationToken cancellationToken = default) =>
-        SaveAsync(scope, key, orderId, expectedVersion, plan, cancellationToken);
+        long expectedVersion, OrderPlan plan, CancellationToken cancellationToken = default, bool? notesVisibleToOperators = null) =>
+        SaveAsync(scope, key, orderId, expectedVersion, plan, notesVisibleToOperators, cancellationToken);
 
     public async Task<ServiceOrder?> GetAsync(OrderPlanningScope scope, Guid orderId,
         CancellationToken cancellationToken = default)
@@ -60,7 +61,7 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
     }
 
     private async Task<OrderPlanningReceipt> SaveAsync(OrderPlanningScope scope, Guid key, Guid? orderId,
-        long? expectedVersion, OrderPlan input, CancellationToken ct)
+        long? expectedVersion, OrderPlan input, bool? notesVisibleToOperators, CancellationToken ct)
     {
         await AuthorizeAsync(scope, orderId.HasValue ? OrderPlanningPermissions.EditPlan : OrderPlanningPermissions.Create, ct);
         if (key == Guid.Empty || orderId == Guid.Empty || expectedVersion <= 0)
@@ -71,16 +72,18 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
         var plan = input.Normalize();
         var operation = orderId.HasValue ? "update_plan" : "create";
         var target = orderId?.ToString("D") ?? "orders";
-        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
-            JsonSerializer.Serialize(new { operation, target, expectedVersion, plan }, JsonOptions))));
+        // Omission keeps the original fingerprint format so pre-migration exact retries work.
+        // Resolve a plant default only after the receipt lookup, never into request identity.
+        var request = notesVisibleToOperators.HasValue
+            ? JsonSerializer.Serialize(new { operation, target, expectedVersion, plan, notesVisibleToOperators }, JsonOptions)
+            : JsonSerializer.Serialize(new { operation, target, expectedVersion, plan }, JsonOptions);
+        var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(request)));
 
         await using var db = new OrderDbContext(options);
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         // Conservative per-plant write serialization for this small slice. Locks are transaction-bound.
         // Hash collisions can reduce concurrency, never weaken scope checks or overwrite data.
-        var lockKey = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"order-planning:{scope.TenantId:D}:{scope.PlantId:D}")));
-        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", ct);
+        await LockPlantAsync(db, scope, ct);
         await using IAsyncDisposable? accessLease = access is ITransactionalOrderPlanningAccess transactionalAccess
             ? await transactionalAccess.BindTransactionAsync(db.Database.GetDbConnection(), transaction.GetDbTransaction(), scope, ct)
             : null;
@@ -111,6 +114,7 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
         var now = new DateTimeOffset(clock.Ticks - clock.Ticks % 10, TimeSpan.Zero);
         ServiceOrder order;
         OrderPlan? before = null;
+        bool? beforeVisible = null;
         if (orderId.HasValue)
         {
             // Row lock also coordinates with future lifecycle writers that do not use our plant lock.
@@ -127,9 +131,12 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
             }
 
             before = order.Plan();
-            if (before != plan)
+            beforeVisible = order.NotesVisibleToOperators;
+            var visible = notesVisibleToOperators ?? order.NotesVisibleToOperators;
+            if (before != plan || visible != order.NotesVisibleToOperators)
             {
                 order.Apply(plan);
+                order.NotesVisibleToOperators = visible;
                 order.Version++;
                 order.UpdatedAtUtc = now;
                 order.UpdatedByIssuer = scope.ActorIssuer;
@@ -161,10 +168,13 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
                 UpdatedBySubject = scope.ActorSubject
             };
             order.Apply(plan);
+            order.NotesVisibleToOperators = notesVisibleToOperators ??
+                await db.NotesDefaults.Where(x => x.TenantId == scope.TenantId && x.PlantId == scope.PlantId)
+                    .Select(x => x.NotesVisibleToOperators).SingleOrDefaultAsync(ct);
             db.Orders.Add(order);
         }
 
-        if (before != plan)
+        if (before != plan || beforeVisible != order.NotesVisibleToOperators)
         {
             db.AuditEntries.Add(new OrderAuditEntry
             {
@@ -179,8 +189,8 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
                 ActorSubject = scope.ActorSubject,
                 ActorDisplayName = access.ActorDisplayName,
                 RequestId = key,
-                BeforePlan = before is null ? null : JsonSerializer.Serialize(before, JsonOptions),
-                AfterPlan = JsonSerializer.Serialize(plan, JsonOptions)
+                BeforePlan = before is null ? null : PlanEvidence(before, beforeVisible!.Value),
+                AfterPlan = PlanEvidence(plan, order.NotesVisibleToOperators)
             });
         }
 
@@ -218,5 +228,22 @@ public sealed class OrderPlanningStore(DbContextOptions<OrderDbContext> options,
         {
             throw new OrderPlanningException("access_denied");
         }
+    }
+
+    private static string PlanEvidence(OrderPlan plan, bool visible) => JsonSerializer.Serialize(new
+    {
+        plan.CustomerId,
+        plan.PlannedReceivingDate,
+        plan.PlannedDeliveryDate,
+        plan.CustomerReference,
+        plan.Notes,
+        notesVisibleToOperators = visible
+    }, JsonOptions);
+
+    private static Task LockPlantAsync(OrderDbContext db, OrderPlanningScope scope, CancellationToken ct)
+    {
+        var lockKey = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"order-planning:{scope.TenantId:D}:{scope.PlantId:D}")));
+        return db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", ct);
     }
 }

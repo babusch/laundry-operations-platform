@@ -361,7 +361,95 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /api/v1/plants/{plantId}/orders/settings/notes:
+    get:
+      operationId: getOrderNotesDefault
+      summary: Read the plant default for operator note visibility
+      description: >-
+        Requires current orders.read in exactly one active tenant assignment.
+        No row means hidden at version zero; this read creates nothing. No query
+        parameters are supported. Responses are no-store. ETag binds tenant/plant/version.
+      security:
+        - managementSession: []
+      parameters:
+        - $ref: '#/components/parameters/NotesDefaultPlant'
+      responses:
+        '200':
+          description: Current plant default, not a live setting inherited by existing orders.
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderNotesDefault'
+        '400': { description: Unsupported query. }
+        '401': { description: Verified human session required. }
+        '403': { description: Permission/scope or Development transport denied. }
+        '404': { description: Feature disabled or outside Development. }
+        '409': { description: Ambiguous tenant assignment. }
+        '503': { description: Safe storage failure; order_notes_default_unavailable. }
+    put:
+      operationId: updateOrderNotesDefault
+      summary: Deliberately change the default for new orders only
+      description: >-
+        Requires current orders.notes.default.edit, not merely orders.plan.edit.
+        No new grant is implied. Uses same-session antiforgery, exact strong scoped
+        If-Match from GET (including version zero), and a retained UUID request key.
+        No query parameters; one strict boolean body property; maximum 1 KiB even
+        when chunked. Retry the identical body/key/precondition after uncertainty.
+        A retry returns the original accepted value/version/ETag without reapplying
+        it or changing existing orders. Every new accepted command is audited.
+      security:
+        - managementSession: []
+          managementCsrf: []
+      parameters:
+        - $ref: '#/components/parameters/NotesDefaultPlant'
+        - name: If-Match
+          in: header
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Management-CSRF
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderNotesDefault'
+      responses:
+        '200':
+          description: Accepted result; exact delayed retries may represent an older version.
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderNotesDefault'
+        '400': { description: Invalid JSON/query/key/CSRF/precondition; duplicate or unknown fields rejected. }
+        '401': { description: Verified human session required; gateway tokens rejected. }
+        '403': { description: Current permission/scope or transport denied. }
+        '404': { description: Feature disabled or outside Development. }
+        '409': { description: Changed reuse of key or ambiguous tenant assignment. }
+        '412': { description: Stale version; version_conflict. }
+        '413': { description: Encoded body exceeds 1 KiB. }
+        '415': { description: JSON content type required. }
+        '428': { description: If-Match required; order_notes_default_precondition_required. }
+        '503': { description: Uncertain storage failure; retry the exact command. }
 components:
+  parameters:
+    NotesDefaultPlant:
+      name: plantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
   securitySchemes:
     managementSession:
       type: apiKey
@@ -374,6 +462,32 @@ components:
       name: X-Management-CSRF
       description: Request token from /management/antiforgery with its same-session antiforgery cookie.
   schemas:
+    OrderNotesDefault:
+      type: object
+      additionalProperties: false
+      required: [notesVisibleToOperators, version]
+      properties:
+        notesVisibleToOperators: { type: boolean }
+        version: { type: integer, format: int64, minimum: 0 }
+    UpdateOrderNotesDefault:
+      type: object
+      additionalProperties: false
+      required: [notesVisibleToOperators]
+      properties:
+        notesVisibleToOperators: { type: boolean }
+    OrderHistoryPlan:
+      type: object
+      additionalProperties: false
+      required: [customerId, plannedReceivingDate, plannedDeliveryDate, customerReference, notes, notesVisibleToOperators]
+      properties:
+        customerId: { type: string, format: uuid }
+        plannedReceivingDate: { type: string, format: date }
+        plannedDeliveryDate: { type: string, format: date }
+        customerReference: { type: [string, 'null'], maxLength: 100 }
+        notes: { type: [string, 'null'], maxLength: 2000 }
+        notesVisibleToOperators:
+          type: [boolean, 'null']
+          description: Recorded creation choice; null means not recorded in legacy evidence, not hidden.
     OrderHistoryPage:
       type: object
       additionalProperties: false
@@ -408,11 +522,11 @@ components:
         initialPlan:
           description: Creation only; null for planning changes.
           anyOf:
-            - $ref: '#/components/schemas/UpdateOrderPlan'
+            - $ref: '#/components/schemas/OrderHistoryPlan'
             - type: 'null'
         changes:
           type: array
-          maxItems: 5
+          maxItems: 6
           description: Empty for creation; only changed fields for a plan change.
           items:
             $ref: '#/components/schemas/OrderPlanChange'
@@ -423,10 +537,10 @@ components:
       properties:
         field:
           type: string
-          enum: [customerId, plannedReceivingDate, plannedDeliveryDate, customerReference, notes]
+          enum: [customerId, plannedReceivingDate, plannedDeliveryDate, customerReference, notes, notesVisibleToOperators]
         before:
           type: [string, 'null']
-          description: Previous value; customer ID is a UUID string, dates are YYYY-MM-DD, text may be null.
+          description: Previous value; UUID/date/text or literal true/false strings for visibility. Null visibility means not recorded.
         after:
           type: [string, 'null']
           description: New value with the same representation as before.
@@ -465,6 +579,9 @@ components:
         notes:
           type: [string, 'null']
           maxLength: 2000
+        notesVisibleToOperators:
+          type: boolean
+          description: Explicit choice; omission copies the plant default at first acceptance. Null is rejected.
     UpdateOrderPlan:
       type: object
       additionalProperties: false
@@ -487,6 +604,9 @@ components:
         notes:
           type: [string, 'null']
           maxLength: 2000
+        notesVisibleToOperators:
+          type: boolean
+          description: Explicit choice; omission preserves the existing order choice, not today's plant default. Null is rejected.
     Order:
       type: object
       additionalProperties: false
@@ -513,6 +633,9 @@ components:
           type: [string, 'null']
         notes:
           type: [string, 'null']
+        notesVisibleToOperators:
+          type: boolean
+          description: Present on current reads/new receipts; absent only in immutable pre-visibility retry receipts. Absence is unknown, never inferred from today's default.
         status:
           type: string
           enum: [planned]

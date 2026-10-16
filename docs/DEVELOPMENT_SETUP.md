@@ -1,5 +1,7 @@
 # Development setup
 
+Local backend upgrade applied (2026-10-16): both order-note visibility migrations are now applied to this local Compose database, with existing records verified unchanged apart from the new hidden visibility flag. Management controls are implemented; default editing still requires a separately approved permission grant, and gateway publication remains deferred. For another database, apply the migrations explicitly before starting the new build. See [order-note visibility setup](ORDER_NOTE_VISIBILITY_SETUP.md); normal startup must not mutate schemas or grant permissions.
+
 For one bookmarked entry point to sign in and view saved orders, see [Development management navigation](MANAGEMENT_NAVIGATION_SETUP.md). The existing `Start-DevelopmentManagement.ps1 -WithOrders` command now also serves this convenience page.
 
 This guide describes the supported local development environment. Keep it updated whenever a required tool or the primary setup commands change.

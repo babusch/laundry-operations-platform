@@ -10,7 +10,9 @@ Stop the running API with Ctrl+C, then run from the repository root:
 .\deploy\local\Start-DevelopmentManagement.ps1 -WithOrders
 ```
 
-Open `https://localhost:7100/management` and bookmark it. With the already applied access/customer/order migrations, no additional migration/seed is needed. The page offers sign-in/status, order navigation, a readable paginated list, planned-order creation/editing, order details, and CSRF-protected local sign-out. Receiving and dispatch are not UI actions yet. Existing JSON routes remain available for diagnostics; users no longer need them for ordinary viewing or planning changes.
+Open `https://localhost:7100/management` and bookmark it. Before starting the new note-visibility build, explicitly apply the two prepared migrations in [note-visibility setup](ORDER_NOTE_VISIBILITY_SETUP.md); this is not done automatically at startup. The page offers sign-in/status, order navigation, a readable paginated list, planned-order creation/editing, order details, and CSRF-protected local sign-out. Receiving and dispatch are not UI actions yet. Existing JSON routes remain available for diagnostics; users no longer need them for ordinary viewing or planning changes.
+
+Order creation/editing now includes **Show notes to operators / Visa anteckningar för operatörer**, and details show the saved choice. The list's **Order settings / Orderinställningar** link opens the plant default. It is readable with current order-read permission and editable only with separate `orders.notes.default.edit`; initialization does not grant it. Defaults initialize new orders only. These controls are implemented but not yet activated in the local database/API.
 
 ## Create a planned order
 

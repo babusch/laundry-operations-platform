@@ -24,6 +24,8 @@ public static partial class DevelopmentManagementPages
         app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}", (Guid plantId, Guid orderId, HttpContext http) => Render(app, http, plantId, orderId));
         app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}/history", (Guid plantId, Guid orderId, HttpContext http) => Render(app, http, plantId, orderId, history: true));
         app.MapGet("/management/orders/{plantId:guid}/new", (Guid plantId, HttpContext http) => CreatePage(app, http, plantId));
+        app.MapGet("/management/orders/{plantId:guid}/settings", (Guid plantId, HttpContext http) => NotesSettingsPage(app, http, plantId));
+        app.MapPost("/management/orders/{plantId:guid}/settings", (Guid plantId, HttpContext http) => NotesSettingsPage(app, http, plantId));
         app.MapPost("/management/orders/{plantId:guid}/new", (Guid plantId, HttpContext http) => CreatePage(app, http, plantId));
         app.MapGet("/management/orders/{plantId:guid}/{orderId:guid}/edit", (Guid plantId, Guid orderId, HttpContext http) => CreatePage(app, http, plantId, orderId));
         app.MapPost("/management/orders/{plantId:guid}/{orderId:guid}/edit", (Guid plantId, Guid orderId, HttpContext http) => CreatePage(app, http, plantId, orderId));
@@ -106,7 +108,7 @@ public static partial class DevelopmentManagementPages
                             }
                             else
                             {
-                                content.Append($"<section class=panel><div class=section-head><h2>{H(order.OrderNumber)}</h2><span class=badge>{T("Planned", "Planerad")}</span></div><dl class=dates><div><dt>{T("Planned receiving", "Planerad inleverans")}</dt><dd>{Date(order.PlannedReceivingDate)}</dd></div><div><dt>{T("Planned delivery", "Planerad leverans")}</dt><dd>{Date(order.PlannedDeliveryDate)}</dd></div></dl><dl><dt>{T("Customer reference", "Kundreferens")}</dt><dd>{H(order.CustomerReference ?? "—")}</dd><dt>{T("Notes", "Anteckningar")}</dt><dd class=notes>{H(order.Notes ?? "—")}</dd><dt>{T("Version", "Version")}</dt><dd>{order.Version}</dd></dl></section>");
+                                content.Append($"<section class=panel><div class=section-head><h2>{H(order.OrderNumber)}</h2><span class=badge>{T("Planned", "Planerad")}</span></div><dl class=dates><div><dt>{T("Planned receiving", "Planerad inleverans")}</dt><dd>{Date(order.PlannedReceivingDate)}</dd></div><div><dt>{T("Planned delivery", "Planerad leverans")}</dt><dd>{Date(order.PlannedDeliveryDate)}</dd></div></dl><dl><dt>{T("Customer reference", "Kundreferens")}</dt><dd>{H(order.CustomerReference ?? "—")}</dd><dt>{T("Notes", "Anteckningar")}</dt><dd class=notes>{H(order.Notes ?? "—")}</dd><dt>{T("Notes shown to operators", "Anteckningar visas för operatörer")}</dt><dd>{(order.NotesVisibleToOperators ? T("Shown", "Visas") : T("Hidden", "Dolda"))}</dd><dt>{T("Version", "Version")}</dt><dd>{order.Version}</dd></dl></section>");
                                 content.Append("<p class=actions>");
                                 if (order.Status == "planned" && matches[0].Permissions.Contains(OrderPlanningPermissions.EditPlan, StringComparer.Ordinal))
                                     content.Append($"<a class=button href='/management/orders/{plantId:D}/{order.Id:D}/edit'>{T("Edit order", "Redigera order")}</a>");
@@ -124,8 +126,10 @@ public static partial class DevelopmentManagementPages
                             {
                                 var rows = await store.ListAsync(scope, limit, cursor?.ReceivingDate, cursor?.OrderId, http.RequestAborted);
                                 content.Append($"<section class=panel><div class=section-head><h2>{T("Saved orders", "Sparade ordrar")}</h2><span class=badge>{T("Read only", "Skrivskyddad")}</span></div><p>{T("Sorted by planned receiving date. Select an order to view its details.", "Sorterat efter planerat inleveransdatum. Välj en order för att visa detaljer.")}</p>");
+                                content.Append("<div class=actions>");
                                 if (matches[0].Permissions.Contains(OrderPlanningPermissions.Create, StringComparer.Ordinal))
                                     content.Append($"<a class=button href='/management/orders/{plantId:D}/new'>{T("Create order", "Skapa order")}</a>");
+                                content.Append($"<a class=button href='/management/orders/{plantId:D}/settings'>{T("Order settings", "Orderinställningar")}</a></div>");
                                 content.Append("<div class=order-list>");
                                 foreach (var order in rows.Take(limit))
                                     content.Append($"<a class=order href='/management/orders/{plantId:D}/{order.Id:D}'><div><strong>{H(order.OrderNumber)}</strong><span>{H(order.CustomerReference ?? T("No customer reference", "Ingen kundreferens"))}</span></div><div><span>{T("Receiving", "Inleverans")}</span><strong>{Date(order.PlannedReceivingDate)}</strong></div><div><span>{T("Delivery", "Leverans")}</span><strong>{Date(order.PlannedDeliveryDate)}</strong></div><span class=badge>{T("Planned", "Planerad")}</span></a>");
@@ -180,6 +184,7 @@ public static partial class DevelopmentManagementPages
     private static string H(string value) => WebUtility.HtmlEncode(value);
     private static string Alert(string text, bool warning = false) => $"<div class='{(warning ? "alert warning" : "alert")}' role=alert><strong>! </strong>{H(text)}</div>";
     private const string Adjustments = """
+        .initial-plan>div:nth-last-child(2){grid-column:1/-1}
         .history-list{list-style:none;padding:0;margin:1.5rem 0;display:grid;gap:1.25rem}.history-entry{border:1px solid #42666f;border-radius:.75rem;padding:1.25rem;min-width:0}.history-entry h3{font-size:1.1rem;margin:0}.history-meta{display:flex;gap:.5rem 1.5rem;flex-wrap:wrap;font-size:.9rem;font-variant-numeric:tabular-nums}.history-meta span{overflow-wrap:anywhere}.initial-plan{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 1.5rem;margin:0}.initial-plan>div:last-child{grid-column:1/-1}.history-change{border-top:1px solid #244A53;padding-top:1rem;margin-top:1rem}.history-change h4{margin:0;font-size:1rem}.change-values{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem;margin:0}.change-values dt{margin-top:.5rem}.history-value{white-space:pre-wrap;overflow-wrap:anywhere}.change-values>div{min-width:0}@media(max-width:48rem){.change-values,.initial-plan{grid-template-columns:1fr;gap:.75rem}.history-entry{padding:1rem}}
         .alert{border-color:#DD6C65;background:#30201f}
         .alert.warning{border-color:#D4A84F;background:#302a1a}

@@ -58,6 +58,14 @@ The production scan workspace is expected to show at least the active order and 
 
 Operators also need explicit ways to record items or quantities that cannot be scanned and to document deviations or other operational problems. These are operator-attributed, auditable business actions with reasons and workflow context. They must not be represented as fabricated barcode or RFID observations.
 
+## Order-note visibility — approved, not yet implemented
+
+- Each plant can configure whether notes are shown to operators by default. Until configured, the default is hidden.
+- Each order stores its own explicit show/hide choice. Management can override the initial choice for that order; authorized management retains access to its notes.
+- The plant default supplies the initial choice for newly created orders only. Changing that default does not change existing orders; this is not a live inherited setting.
+- Hidden notes must be excluded from gateway publication, not merely hidden by station UI. If previously published notes are switched off, the gateway must remove its working copy when it receives the update. An offline gateway cannot apply a visibility change until it reconnects; do not promise immediate remote removal.
+- The database/backend, protected visibility/default API contracts and Development management controls are implemented; local activation and gateway propagation/recovery remain separate slices. Creation starts from the displayed default, then saves an explicit choice. Planned editing and details use the saved order choice; the plant default has a separately permissioned settings page. Read-only history displays recorded choices without inventing legacy values. See [setup](ORDER_NOTE_VISIBILITY_SETUP.md). This does not activate order-backed scanning or publish notes to gateways.
+
 ## Initial product boundary
 
 After receiving starts, valid incoming scans remain allowed until the whole order is completed, including during processing and dispatch. A separate receiving-complete milestone is documented as a deferred proposal in the workflow document and requires future review before implementation.

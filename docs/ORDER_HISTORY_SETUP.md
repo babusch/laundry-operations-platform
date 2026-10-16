@@ -6,7 +6,7 @@ Date: 2026-10-15. The protected API/name recording was implemented first, follow
 
 Open `/management`, select an order, then **View history / Visa historik**. The Development-only page at `/management/orders/{plantId}/{orderId}/history` reuses the verified session, current scoped `orders.read` and owning order store. It makes no business writes and needs no new permission, migration or dependency.
 
-The page shows the original five planning fields, then only saved changes with labeled Before/After values, ascending version, account-name snapshot and server-recorded time. Missing historical names say Name unavailable / Namn saknas; names are not inferred. Dates are localized in Swedish/English; timestamps explicitly use Europe/Stockholm with numeric UTC offset, including daylight-saving changes. Storage and machine-readable time remain UTC. Language is not a timezone selector.
+The page shows the original five planning fields plus recorded operator-note visibility, then only saved changes with labeled Before/After values, ascending version, account-name snapshot and server-recorded time. Visibility uses Shown/Hidden/Not recorded (Visas/Dolda/Ej registrerat); missing legacy evidence is never inferred as hidden. Missing historical account names say Name unavailable / Namn saknas. Dates are localized in Swedish/English; timestamps explicitly use Europe/Stockholm with numeric UTC offset, including daylight-saving changes. Storage and machine-readable time remain UTC. Language is not a timezone selector. See [visibility API follow-up](ORDER_NOTE_VISIBILITY_SETUP.md#api-follow-up-2026-10-15) for the pending local activation boundary.
 
 Customer labels are **current** code/name lookups for referenced IDs only (bounded to at most 51), restricted to the same tenant and plant-service link, including inactive customers/services. They are not historical name snapshots. Missing labels say Customer unavailable; cross-tenant/plant labels are never fetched as a fallback. All values are HTML-encoded; multiline text retains its line breaks.
 
@@ -24,8 +24,8 @@ The response is `{ "items": [...], "nextCursor": null }`, with an opaque cursor 
 
 - `version`, `action` (`order_created` or `order_plan_changed`) and server `recordedAtUtc`.
 - `actorDisplayName`: the bounded verified account-name snapshot, or null when unavailable. The UI translates null to “Name unavailable”; it must not guess or expose the raw identity as a fallback.
-- `initialPlan`: all five original planning fields for creation; null for changes.
-- `changes`: empty for creation; otherwise only changed fields with `field`, `before` and `after`. Field names are language-neutral; values are strings/null (UUID for customer, YYYY-MM-DD for dates, text/null for reference/notes).
+- `initialPlan`: five original planning fields plus nullable recorded `notesVisibleToOperators` for creation; null for changes. Null visibility means not recorded in legacy evidence.
+- `changes`: empty for creation; otherwise only changed fields with `field`, `before` and `after` (at most six). Field names are language-neutral; values are strings/null (UUID for customer, YYYY-MM-DD for dates, text/null for reference/notes, literal `true`/`false` strings or unknown/null for visibility).
 
 Internal tenant/actor issuer/subject, audit IDs, request keys and receipt fingerprints are not returned. Planning notes/reference and account names are access-controlled business data, not routine diagnostic logs. The read is no-store, requires neither antiforgery nor an idempotency key, and makes no order, audit, receipt or numbering writes. Customer deactivation does not hide historical evidence. Unchanged saves, rejected work and exact retries add no history entries.
 

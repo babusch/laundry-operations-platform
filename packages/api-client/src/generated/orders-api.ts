@@ -88,10 +88,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/plants/{plantId}/orders/settings/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the plant default for operator note visibility
+         * @description Requires current orders.read in exactly one active tenant assignment. No row means hidden at version zero; this read creates nothing. No query parameters are supported. Responses are no-store. ETag binds tenant/plant/version.
+         */
+        get: operations["getOrderNotesDefault"];
+        /**
+         * Deliberately change the default for new orders only
+         * @description Requires current orders.notes.default.edit, not merely orders.plan.edit. No new grant is implied. Uses same-session antiforgery, exact strong scoped If-Match from GET (including version zero), and a retained UUID request key. No query parameters; one strict boolean body property; maximum 1 KiB even when chunked. Retry the identical body/key/precondition after uncertainty. A retry returns the original accepted value/version/ETag without reapplying it or changing existing orders. Every new accepted command is audited.
+         */
+        put: operations["updateOrderNotesDefault"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OrderNotesDefault: {
+            notesVisibleToOperators: boolean;
+            /** Format: int64 */
+            version: number;
+        };
+        UpdateOrderNotesDefault: {
+            notesVisibleToOperators: boolean;
+        };
+        OrderHistoryPlan: {
+            /** Format: uuid */
+            customerId: string;
+            /** Format: date */
+            plannedReceivingDate: string;
+            /** Format: date */
+            plannedDeliveryDate: string;
+            customerReference: string | null;
+            notes: string | null;
+            /** @description Recorded creation choice; null means not recorded in legacy evidence, not hidden. */
+            notesVisibleToOperators: boolean | null;
+        };
         OrderHistoryPage: {
             items: components["schemas"]["OrderHistoryEntry"][];
             nextCursor: string | null;
@@ -106,14 +150,14 @@ export interface components {
             /** @description Verified account-name snapshot; null means unavailable, never a guessed name. */
             actorDisplayName: string | null;
             /** @description Creation only; null for planning changes. */
-            initialPlan: components["schemas"]["UpdateOrderPlan"] | null;
+            initialPlan: components["schemas"]["OrderHistoryPlan"] | null;
             /** @description Empty for creation; only changed fields for a plan change. */
             changes: components["schemas"]["OrderPlanChange"][];
         };
         OrderPlanChange: {
             /** @enum {string} */
-            field: "customerId" | "plannedReceivingDate" | "plannedDeliveryDate" | "customerReference" | "notes";
-            /** @description Previous value; customer ID is a UUID string, dates are YYYY-MM-DD, text may be null. */
+            field: "customerId" | "plannedReceivingDate" | "plannedDeliveryDate" | "customerReference" | "notes" | "notesVisibleToOperators";
+            /** @description Previous value; UUID/date/text or literal true/false strings for visibility. Null visibility means not recorded. */
             before: string | null;
             /** @description New value with the same representation as before. */
             after: string | null;
@@ -138,6 +182,8 @@ export interface components {
             plannedDeliveryDate: string;
             customerReference?: string | null;
             notes?: string | null;
+            /** @description Explicit choice; omission copies the plant default at first acceptance. Null is rejected. */
+            notesVisibleToOperators?: boolean;
         };
         UpdateOrderPlan: {
             /** Format: uuid */
@@ -154,6 +200,8 @@ export interface components {
             plannedDeliveryDate: string;
             customerReference: string | null;
             notes: string | null;
+            /** @description Explicit choice; omission preserves the existing order choice, not today's plant default. Null is rejected. */
+            notesVisibleToOperators?: boolean;
         };
         Order: {
             /** Format: uuid */
@@ -169,6 +217,8 @@ export interface components {
             plannedDeliveryDate: string;
             customerReference: string | null;
             notes: string | null;
+            /** @description Present on current reads/new receipts; absent only in immutable pre-visibility retry receipts. Absence is unknown, never inferred from today's default. */
+            notesVisibleToOperators?: boolean;
             /** @enum {string} */
             status: "planned";
             /** Format: int64 */
@@ -186,7 +236,9 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        NotesDefaultPlant: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -607,6 +659,172 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
+            };
+        };
+    };
+    getOrderNotesDefault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plantId: components["parameters"]["NotesDefaultPlant"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current plant default, not a live setting inherited by existing orders. */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderNotesDefault"];
+                };
+            };
+            /** @description Unsupported query. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Verified human session required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Permission/scope or Development transport denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature disabled or outside Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ambiguous tenant assignment. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Safe storage failure; order_notes_default_unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateOrderNotesDefault: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+                "Idempotency-Key": string;
+                "X-Management-CSRF": string;
+            };
+            path: {
+                plantId: components["parameters"]["NotesDefaultPlant"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrderNotesDefault"];
+            };
+        };
+        responses: {
+            /** @description Accepted result; exact delayed retries may represent an older version. */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderNotesDefault"];
+                };
+            };
+            /** @description Invalid JSON/query/key/CSRF/precondition; duplicate or unknown fields rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Verified human session required; gateway tokens rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current permission/scope or transport denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature disabled or outside Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Changed reuse of key or ambiguous tenant assignment. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stale version; version_conflict. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Encoded body exceeds 1 KiB. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description JSON content type required. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description If-Match required; order_notes_default_precondition_required. */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Uncertain storage failure; retry the exact command. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -137,6 +137,9 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         using var changed = await client.PostAsync(CreatePagePath, new FormUrlEncodedContent(lockedValues));
         Assert.Equal(HttpStatusCode.Conflict, changed.StatusCode);
         lockedValues["notes"] = form.Values["notes"];
+        lockedValues["visibility"] = "true";
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(CreatePagePath, new FormUrlEncodedContent(lockedValues))).StatusCode);
+        lockedValues["visibility"] = form.Values["visibility"];
         using var retry = await client.PostAsync(CreatePagePath, new FormUrlEncodedContent(lockedValues));
         Assert.Equal(HttpStatusCode.SeeOther, retry.StatusCode);
         await AssertCounts(1);
@@ -299,6 +302,7 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         values["delivery"] = "2030-01-03";
         values["reference"] = "Synthetic form reference";
         values["notes"] = "Synthetic form notes";
+        values["visibility"] = "false";
         values["lang"] = "en";
         values["action"] = "save";
         return (html, values);
@@ -380,7 +384,8 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Equal("no-store", response.Headers.CacheControl!.ToString());
         var page = await response.Content.ReadFromJsonAsync<JsonElement>();
         var item = Assert.Single(page.GetProperty("items").EnumerateArray());
-        Assert.Equal(12, item.EnumerateObject().Count());
+        Assert.Equal(13, item.EnumerateObject().Count());
+        Assert.False(item.GetProperty("notesVisibleToOperators").GetBoolean());
         Assert.DoesNotContain(_subject, page.GetRawText());
         Assert.Equal(JsonValueKind.Null, page.GetProperty("nextCursor").ValueKind);
         await using var db = new OrderDbContext(_orders);
@@ -475,7 +480,8 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Equal("no-store", response.Headers.CacheControl!.ToString());
         var details = await response.Content.ReadFromJsonAsync<JsonElement>();
         var original = await created.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.Equal(12, details.EnumerateObject().Count());
+        Assert.Equal(13, details.EnumerateObject().Count());
+        Assert.False(details.GetProperty("notesVisibleToOperators").GetBoolean());
         foreach (var property in original.EnumerateObject())
             Assert.Equal(property.Value.ToString(), details.GetProperty(property.Name).ToString());
         Assert.DoesNotContain(_subject, details.GetRawText());
@@ -678,6 +684,8 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync($"{Path}/{Guid.NewGuid():D}")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(Path)).StatusCode);
         using var wrongPlant = await Create(_client, Guid.NewGuid(), path: $"/api/v1/plants/{Guid.NewGuid():D}/orders");
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(NotesDefaultPath)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Update(anonymous, Guid.NewGuid(), NotesDefaultPath, null, "{}")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, wrongPlant.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync($"/api/v1/plants/{Guid.NewGuid():D}/orders/{Guid.NewGuid():D}")).StatusCode);
     }
@@ -780,6 +788,10 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         Assert.Equal(status, (int)(await client.GetAsync(EditPath(Guid.NewGuid()))).StatusCode);
         Assert.Equal(status, (int)(await client.GetAsync($"{Path}/{Guid.NewGuid():D}/history")).StatusCode);
         Assert.Equal(status, (int)(await client.GetAsync(HistoryPage(Guid.NewGuid()))).StatusCode);
+        Assert.Equal(status, (int)(await client.GetAsync(NotesDefaultPath)).StatusCode);
+        Assert.Equal(status, (int)(await Update(client, Guid.NewGuid(), NotesDefaultPath, null, "{}")).StatusCode);
+        Assert.Equal(status, (int)(await client.GetAsync(NotesSettingsPath)).StatusCode);
+        Assert.Equal(status, (int)(await client.PostAsync(NotesSettingsPath, new FormUrlEncodedContent([]))).StatusCode);
         Assert.Equal(status, (int)(await client.PostAsync(EditPath(Guid.NewGuid()), new FormUrlEncodedContent([]))).StatusCode);
     }
 

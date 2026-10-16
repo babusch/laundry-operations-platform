@@ -195,8 +195,8 @@ public sealed partial class OrderCreateEndpointTests
         await migrator.MigrateAsync("20261011081625_InitialOrderPlanning");
         var id = Guid.NewGuid(); var auditId = Guid.NewGuid(); var key = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        db.Orders.Add(new ServiceOrder { Id = id, TenantId = Tenant, PlantId = Plant, CustomerId = Customer, OrderNumber = "SYNTHETIC-LEGACY", PlannedReceivingDate = new DateOnly(2030, 1, 1), PlannedDeliveryDate = new DateOnly(2030, 1, 3), CreatedAtUtc = now, UpdatedAtUtc = now, CreatedByIssuer = ManagementAccessStore.DevelopmentIssuer, CreatedBySubject = _subject, UpdatedByIssuer = ManagementAccessStore.DevelopmentIssuer, UpdatedBySubject = _subject });
-        await db.SaveChangesAsync();
+        // Seed only columns that existed at the target historical migration.
+        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO orders.service_orders (id,tenant_id,plant_id,customer_id,order_number,planned_receiving_date,planned_delivery_date,status,version,created_at_utc,updated_at_utc,created_by_issuer,created_by_subject,updated_by_issuer,updated_by_subject) VALUES ({id},{Tenant},{Plant},{Customer},'SYNTHETIC-LEGACY','2030-01-01','2030-01-03','planned',1,{now},{now},{ManagementAccessStore.DevelopmentIssuer},{_subject},{ManagementAccessStore.DevelopmentIssuer},{_subject})");
         var plan = JsonSerializer.Serialize(new OrderPlan(Customer, new DateOnly(2030, 1, 1), new DateOnly(2030, 1, 3)), new JsonSerializerOptions(JsonSerializerDefaults.Web));
         await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO orders.order_audit_entries (id,tenant_id,plant_id,order_id,action,order_version,recorded_at_utc,actor_issuer,actor_subject,request_id,after_plan) VALUES ({auditId},{Tenant},{Plant},{id},'order_created',1,{now},{ManagementAccessStore.DevelopmentIssuer},{_subject},{key},{plan}::jsonb)");
         await migrator.MigrateAsync();

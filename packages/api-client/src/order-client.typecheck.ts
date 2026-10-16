@@ -30,3 +30,19 @@ type NoRawHistoryIdentity = Assert<
 type HistoryChangesPermitClearing = Assert<
   null extends components["schemas"]["OrderPlanChange"]["after"] ? true : false
 >;
+
+type VisibilityCanBeOmitted = Assert<
+  Omit<Plan, "notesVisibleToOperators"> extends Plan ? true : false
+>;
+type VisibilityRejectsNull = Assert<
+  null extends Plan["notesVisibleToOperators"] ? false : true
+>;
+type HistoricalVisibilityCanBeUnknown = Assert<
+  null extends components["schemas"]["OrderHistoryPlan"]["notesVisibleToOperators"] ? true : false
+>;
+type LegacyReceiptCanOmitVisibility = Assert<
+  Omit<components["schemas"]["Order"], "notesVisibleToOperators"> extends components["schemas"]["Order"] ? true : false
+>;
+type DefaultPreconditionRequired = Assert<
+  Omit<operations["updateOrderNotesDefault"]["parameters"]["header"], "If-Match"> extends operations["updateOrderNotesDefault"]["parameters"]["header"] ? false : true
+>;

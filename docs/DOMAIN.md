@@ -28,6 +28,10 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 | Deviation | Operator-recorded departure from the expected order, quantity, item, quality, or process, with reason and workflow context |
 | Exception | State requiring operator or supervisor intervention |
 
+## Order-note visibility
+
+Order-note visibility is an explicit stored order choice, not dynamic inheritance. A scoped plant default initializes new orders only; the unconfigured default is hidden. Management can override either direction per order. Later default changes leave existing orders unchanged. The backend and protected HTTP contracts record/expose choices and immutable default-setting evidence. Development management forms now capture the displayed choice, details show the saved choice, and a separately permissioned page controls the plant default. Local activation and gateway projection remain separate work. Missing legacy history means not recorded, not a guessed hidden choice. Old immutable receipts may omit visibility; current reads supply the actual choice. See [setup](ORDER_NOTE_VISIBILITY_SETUP.md).
+
 ## Identity principles
 
 Management audit identity: stable verified issuer/subject identify the person. The approved order-history display additionally snapshots a bounded verified account name from that person's login when a create/change commits. This mutable, potentially nonunique name is display metadata, never authorization or a replacement for stable identity. Old/unavailable names remain null; current account names do not rewrite historical evidence. See [order history setup](ORDER_HISTORY_SETUP.md).

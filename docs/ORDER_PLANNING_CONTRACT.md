@@ -1,6 +1,14 @@
 # Order planning: proposed database and API contract
 
-Status: storage, protected creation, detail reads, unfiltered paginated lists, planned-update API, Development edit UI and protected history API implemented; history UI remains deferred.
+Status: storage, protected creation, detail/list/update/history APIs, Development edit/history UI and operator-note visibility/default APIs and management controls implemented. Visibility live activation and cloud-to-gateway publication remain deferred.
+
+## Approved follow-up: operator-note visibility
+
+See [product rules](PRODUCT.md#order-note-visibility--approved-not-yet-implemented). A configurable plant default initializes an explicit per-order show/hide choice, with hidden as the unconfigured default. Management can override either direction on an individual order. Later default changes never silently change existing orders. Authorized management keeps access to the notes.
+
+The owning store persists the order flag, scoped plant default and immutable default-setting command evidence. Existing orders migrate to hidden without rewriting evidence. Create copies the default unless overridden; omitted edits preserve the choice. Explicit changes remain planned-only, versioned, audited and retry-safe. Create/update HTTP bodies now accept an optional boolean; current public reads/new receipts include it, while old retry bodies remain unchanged and may omit it. History explicitly preserves unknown legacy visibility. Scoped GET/PUT `orders/settings/notes` expose the plant default, with a separate edit permission excluded from the management bundle and strong conditional/idempotent antiforgery-protected writes. Development forms now capture the displayed per-order choice and offer a separately permissioned default page with explicit stale review and exact retries. See [setup details](ORDER_NOTE_VISIBILITY_SETUP.md). Live permission/schema activation remains separate work.
+
+Gateway publication must exclude hidden note contents and explicitly clear previously published notes when a newer hide update is applied. An absent value must not accidentally mean “retain the old notes.” Offline propagation and stale-update handling remain part of the publication design, not an instant-revocation promise.
 
 History update (2026-10-15): reads return public creation/changed-field evidence, UTC time, version and nullable verified account-name snapshot; ascending version pagination is bounded (default 25/max 100) with order/tenant/plant/limit-bound protected continuation. Reads require current `orders.read`, make no writes and expose no raw actor/request identity. `OrderAuditAccountName` adds nullable `actor_display_name` (varchar 200); old evidence remains untouched and null. The optional OIDC profile scope supplies one validated preferred_username; it is display metadata, never authority. Live migration/profile/login-to-audit capture is verified. The bilingual read-only history page is implemented in the Development management bridge, with 25-entry paging, explicit before/after values, current scoped customer labels and Europe/Stockholm timestamps. See [history setup](ORDER_HISTORY_SETUP.md).
 
@@ -37,6 +45,7 @@ This table holds the current order plan, not scanned items or mutable movement c
 | `planned_delivery_date` | `date` | Yes | Planned delivery to the customer, not plant dispatch time |
 | `customer_reference` | `varchar(100)` | No | Customer's own reference |
 | `notes` | `varchar(2000)` | No | Planning instructions; not operational exception evidence |
+| `notes_visible_to_operators` | `boolean` | Yes | Stored order choice; old orders migrate to hidden. Backend-only until HTTP/UI exposure is added |
 | `status` | `text` | Yes | Initially `planned`; no other state is writable in this slice |
 | `version` | `bigint` | Yes | Starts at 1; increments when the persisted plan changes |
 | `created_at_utc` | `timestamptz` | Yes | Server creation time, represented as UTC |

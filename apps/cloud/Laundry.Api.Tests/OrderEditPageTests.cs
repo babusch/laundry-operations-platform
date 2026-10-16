@@ -25,6 +25,7 @@ public sealed partial class OrderCreateEndpointTests
         values["delivery"] = "2030-01-03";
         values["reference"] = "";
         values["notes"] = "Synthetic planned order";
+        values["visibility"] = "false";
         values["lang"] = "en";
         values["action"] = "save";
         return (id, values, html);

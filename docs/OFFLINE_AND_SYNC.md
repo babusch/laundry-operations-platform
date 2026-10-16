@@ -14,6 +14,10 @@ The user-approved initial secure-slice policy allows enrolled sources with local
 
 The user interface may show success only after the event is durable in IndexedDB or, preferably, acknowledged by the local gateway. These two states must be visually distinguishable.
 
+## Planned-order publication: approved note-visibility requirement
+
+Cloud-to-gateway order publication is not implemented yet. The approved [operator-note visibility rules](PRODUCT.md#order-note-visibility--approved-not-yet-implemented) require hidden notes to be omitted from published content, not just concealed by station UI. A gateway that already holds notes must clear its working copy when it applies a newer update hiding them. Subsequent visible copies must not be restored by delayed older updates. An offline gateway cannot receive that change immediately; the station must not imply its local copy is current merely because it is available. Detailed projection/versioning, station caches and recovery/retention behavior still need review before implementation. Existing append-only evidence must not be silently rewritten as part of working-copy removal.
+
 ## Event envelope
 
 Every device-originated event should carry at least:

@@ -19,8 +19,8 @@ public static partial class DevelopmentManagementPages
 {
     // Protected scope/key survives form retries; it is not an authorization grant.
     private sealed record CreateDraft(OrderPlanningScope Scope, Guid Key, OrderPlan? LockedPlan = null,
-        Guid? OrderId = null, long? ExpectedVersion = null, long? ReviewVersion = null);
-    private sealed record CreateFields(string Customer = "", string Receiving = "", string Delivery = "", string Reference = "", string Notes = "");
+        Guid? OrderId = null, long? ExpectedVersion = null, long? ReviewVersion = null, bool? LockedVisibility = null, bool RequiresVisibility = false);
+    private sealed record CreateFields(string Customer = "", string Receiving = "", string Delivery = "", string Reference = "", string Notes = "", string Visibility = "false");
 
     private static async Task<IResult> CreatePage(WebApplication app, HttpContext http, Guid plantId, Guid? targetId = null)
     {
@@ -76,12 +76,12 @@ public static partial class DevelopmentManagementPages
                 catch (AntiforgeryValidationException)
                 { return Failure(400, "The security check failed. Reopen the form before saving.", "Säkerhetskontrollen misslyckades. Öppna formuläret igen innan du sparar."); }
                 var csrfField = antiforgery.GetTokens(http).FormFieldName;
-                if (form.Keys.Any(x => x != csrfField && x is not ("draft" or "action" or "lang" or "customer" or "receiving" or "delivery" or "reference" or "notes" or "validation")) ||
+                if (form.Keys.Any(x => x != csrfField && x is not ("draft" or "action" or "lang" or "customer" or "receiving" or "delivery" or "reference" or "notes" or "validation" or "visibility")) ||
                     form.Any(x => x.Value.Count != 1) || form["action"].ToString() is not ("save" or "language" or "review") ||
                     (!editing && form["action"] == "review"))
                     return Failure(400, "The form request is invalid.", "Formulärbegäran är ogiltig.");
                 if (form["lang"].ToString() is "sv" or "en") lang = form["lang"].ToString();
-                fields = new(form["customer"].ToString(), form["receiving"].ToString(), form["delivery"].ToString(), form["reference"].ToString(), form["notes"].ToString());
+                fields = new(form["customer"].ToString(), form["receiving"].ToString(), form["delivery"].ToString(), form["reference"].ToString(), form["notes"].ToString(), form["visibility"].ToString());
                 draftToken = form["draft"].ToString();
                 try { draft = JsonSerializer.Deserialize<CreateDraft>(protector.Unprotect(draftToken)); }
                 catch (Exception ex) when (ex is CryptographicException or JsonException or ArgumentException) { }
@@ -115,7 +115,7 @@ public static partial class DevelopmentManagementPages
                 choices = await http.RequestServices.GetRequiredService<CustomerStore>().ReadChoicesAsync(scope.TenantId, plantId, http.RequestAborted);
 
                 if (form["action"] == "language" && form["validation"] == "1")
-                    ValidateCreate(fields, errors, T); // Translate existing feedback without attempting a save.
+                    ValidateCreate(fields, errors, T, !draft.RequiresVisibility); // Translate existing feedback without attempting a save.
 
                 if (form["action"] == "review")
                 {
@@ -137,9 +137,10 @@ public static partial class DevelopmentManagementPages
 
                 if (form["action"] == "save" && draft.ReviewVersion is null)
                 {
-                    var plan = ValidateCreate(fields, errors, T);
+                    var plan = ValidateCreate(fields, errors, T, !draft.RequiresVisibility);
+                    bool? visibility = fields.Visibility.Length == 0 && !draft.RequiresVisibility ? null : fields.Visibility == "true";
                     if (errors.Count > 0) statusCode = 400;
-                    else if (draft.LockedPlan is not null && draft.LockedPlan != plan!.Normalize())
+                    else if (draft.LockedPlan is not null && (draft.LockedPlan != plan!.Normalize() || draft.LockedVisibility != visibility))
                     {
                         statusCode = 409;
                         message = T("The retry must keep the original fields. Return to the previous form and retry unchanged.", "Försöket måste behålla originalfälten. Gå tillbaka till föregående formulär och försök igen utan ändringar.");
@@ -147,11 +148,11 @@ public static partial class DevelopmentManagementPages
                     else
                     {
                         // The same transaction/authentication seam as the JSON API, not another business implementation.
-                        draft = draft with { LockedPlan = plan!.Normalize() };
+                        draft = draft with { LockedPlan = plan!.Normalize(), LockedVisibility = visibility };
                         attemptedSave = true;
                         var receipt = editing
-                            ? await store.UpdateAsync(scope, draft.Key, targetId!.Value, draft.ExpectedVersion!.Value, plan, http.RequestAborted)
-                            : await store.CreateAsync(scope, draft.Key, plan, http.RequestAborted);
+                            ? await store.UpdateAsync(scope, draft.Key, targetId!.Value, draft.ExpectedVersion!.Value, plan, http.RequestAborted, draft.LockedVisibility)
+                            : await store.CreateAsync(scope, draft.Key, plan, http.RequestAborted, draft.LockedVisibility);
                         using var json = JsonDocument.Parse(receipt.Body);
                         var orderId = json.RootElement.GetProperty("id").GetGuid();
                         http.Response.Headers.Location = $"/management/orders/{plantId:D}/{orderId:D}";
@@ -161,8 +162,9 @@ public static partial class DevelopmentManagementPages
             }
             else
             {
-                draft = new(scope, Guid.NewGuid(), OrderId: targetId, ExpectedVersion: current?.Version);
-                if (editing) fields = Fields(current!.Plan());
+                draft = new(scope, Guid.NewGuid(), OrderId: targetId, ExpectedVersion: current?.Version, RequiresVisibility: true);
+                if (editing) fields = Fields(current!.Plan()) with { Visibility = current.NotesVisibleToOperators ? "true" : "false" };
+                else fields = fields with { Visibility = (await store.ReadNotesDefaultForCreationAsync(scope, http.RequestAborted)).NotesVisibleToOperators ? "true" : "false" };
                 choices = await http.RequestServices.GetRequiredService<CustomerStore>().ReadChoicesAsync(scope.TenantId, plantId, http.RequestAborted);
             }
         }
@@ -174,7 +176,7 @@ public static partial class DevelopmentManagementPages
             statusCode = exception.Code is "idempotency_conflict" or "version_conflict" ? 409 : 400;
             if (exception.Code == "version_conflict")
             {
-                draft = draft! with { LockedPlan = null, ReviewVersion = current!.Version };
+                draft = draft! with { LockedPlan = null, LockedVisibility = null, ReviewVersion = current!.Version };
                 // Reload after the failed transaction; the earlier page read may be stale.
                 try
                 {
@@ -189,7 +191,7 @@ public static partial class DevelopmentManagementPages
             else if (exception.Code == "customer_not_eligible")
             {
                 errors["customer"] = T("This customer is no longer available for this plant. Select an eligible customer.", "Kunden är inte längre tillgänglig för den här anläggningen. Välj en tillgänglig kund.");
-                draft = draft! with { LockedPlan = null }; // Definitive rejection: no successful receipt exists.
+                draft = draft! with { LockedPlan = null, LockedVisibility = null }; // Definitive rejection: no successful receipt exists.
             }
             else message = T("This save conflicts with an earlier request. Do not create another order until you have checked the order list.", "Sparförsöket krockar med en tidigare begäran. Kontrollera orderlistan innan du skapar en annan order.");
         }
@@ -237,6 +239,10 @@ public static partial class DevelopmentManagementPages
         content.Append("</div>");
         content.Append(Field("reference", T("Customer reference (optional)", "Kundreferens (valfri)"), Input("reference", fields.Reference, extra: "maxlength=100")));
         content.Append(Field("notes", T("Notes (optional)", "Anteckningar (valfria)"), $"<textarea id=notes name=notes rows=4 maxlength=2000 {Invalid("notes")} {(locked ? "readonly" : "")}>{H(fields.Notes)}</textarea>"));
+        content.Append(Field("visibility", T("Show notes to operators", "Visa anteckningar för operatörer"), VisibilitySelect(fields.Visibility, locked, Invalid("visibility"), T)));
+        if (locked && !draft.LockedVisibility.HasValue)
+            content.Append(Alert(T("This older form did not record a visibility choice. Retrying preserves its original request; check the saved order afterward.", "Det här äldre formuläret registrerade inget synlighetsval. Ett nytt försök bevarar originalbegäran; kontrollera den sparade ordern efteråt."), true));
+        content.Append($"<p class=help>{(editing ? T("This choice applies only to this order. Management can still read hidden notes.", "Valet gäller endast den här ordern. Administrationen kan fortfarande läsa dolda anteckningar.") : T("Initially set from the plant default. The choice shown here will be saved for this order, even if the default later changes.", "Förvalt från anläggningens standard. Valet som visas här sparas för den här ordern, även om standarden senare ändras."))}</p>");
         content.Append($"</fieldset><div class=create-actions><button name=action value=save {(draft.ReviewVersion.HasValue || (choices.Length == 0 && !locked && statusCode != 503) ? "disabled" : "")}>{(locked ? T("Retry same save", "Försök spara igen") : editing ? T("Save changes", "Spara ändringar") : T("Save planned order", "Spara planerad order"))}</button>");
         if (draft.ReviewVersion.HasValue && current is not null && current.Status == "planned")
             content.Append($"<button name=action value=review formnovalidate>{T("I reviewed the latest values — keep my entries", "Jag har granskat de senaste uppgifterna — behåll mina fält")}</button>");
@@ -256,10 +262,11 @@ public static partial class DevelopmentManagementPages
             Row(t("Planned receiving date", "Planerat inleveransdatum"), current.PlannedReceivingDate.ToString("d MMM yyyy", CultureInfo.GetCultureInfo(t("en-GB", "sv-SE")))) +
             Row(t("Planned delivery date", "Planerat leveransdatum"), current.PlannedDeliveryDate.ToString("d MMM yyyy", CultureInfo.GetCultureInfo(t("en-GB", "sv-SE")))) +
             Row(t("Customer reference", "Kundreferens"), current.CustomerReference ?? "—") + Row(t("Notes", "Anteckningar"), current.Notes ?? "—") +
+            Row(t("Show notes to operators", "Visa anteckningar för operatörer"), current.NotesVisibleToOperators ? t("Shown", "Visas") : t("Hidden", "Dolda")) +
             $"</dl><p>{t("Your unsaved entries are below. Reviewing does not save them.", "Dina osparade uppgifter finns nedan. Granskningen sparar dem inte.")}</p></section>";
     }
 
-    private static OrderPlan? ValidateCreate(CreateFields fields, Dictionary<string, string> errors, Func<string, string, string> t)
+    private static OrderPlan? ValidateCreate(CreateFields fields, Dictionary<string, string> errors, Func<string, string, string> t, bool allowLegacyOmission = false)
     {
         if (!Guid.TryParseExact(fields.Customer, "D", out var customer) || customer == Guid.Empty) errors["customer"] = t("Select a customer.", "Välj en kund.");
         if (!DateOnly.TryParseExact(fields.Receiving, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var receiving) || receiving == default)
@@ -270,6 +277,12 @@ public static partial class DevelopmentManagementPages
             errors["delivery"] = t("Delivery cannot be before receiving.", "Leverans kan inte vara före inleverans.");
         if (fields.Reference.Length > 100) errors["reference"] = t("Use at most 100 characters.", "Använd högst 100 tecken.");
         if (fields.Notes.Length > 2000) errors["notes"] = t("Use at most 2000 characters.", "Använd högst 2000 tecken.");
+        if (fields.Visibility is not ("true" or "false") && !(allowLegacyOmission && fields.Visibility.Length == 0))
+            errors["visibility"] = t("Choose whether notes are shown or hidden.", "Välj om anteckningarna ska visas eller döljas.");
         return errors.Count == 0 ? new(customer, receiving, delivery, fields.Reference, fields.Notes) : null;
     }
+
+    private static string VisibilitySelect(string value, bool locked, string extra, Func<string, string, string> t) =>
+        $"<span class=select-control><select id=visibility name=visibility required {extra} {(locked ? "disabled" : "")}>{(value is not ("true" or "false") ? $"<option value='' selected disabled>{t("Choose visibility", "Välj synlighet")}</option>" : "")}<option value=false {(value == "false" ? "selected" : "")}>{t("Hidden", "Dolda")}</option><option value=true {(value == "true" ? "selected" : "")}>{t("Shown", "Visas")}</option></select><svg class=select-chevron aria-hidden=true focusable=false viewBox='0 0 16 16'><path d='m3 6 5 5 5-5'/></svg></span>" +
+        (locked ? $"<input type=hidden name=visibility value='{H(value)}'>" : "");
 }

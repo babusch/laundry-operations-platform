@@ -48,6 +48,7 @@ public static partial class DevelopmentOrderEndpoints
     {
         if (!Enabled(app.Configuration, app.Environment)) return;
         MapHistory(app);
+        MapNotesDefault(app);
         app.MapGet("/api/v1/plants/{plantId:guid}/orders", async (Guid plantId, HttpContext http,
             ManagementAccessStore memberships, DbContextOptions<OrderDbContext> orderOptions,
             DbContextOptions<ManagementAccessDbContext> membershipOptions, DbContextOptions<CustomerDbContext> customerOptions,
@@ -185,11 +186,12 @@ public static partial class DevelopmentOrderEndpoints
                 (!document.RootElement.TryGetProperty("customerReference", out _) || !document.RootElement.TryGetProperty("notes", out _))))
                 return Error(http, 400, "invalid_order_request");
             var scope = new OrderPlanningScope(assignments[0].TenantId, plantId, actor!.Issuer, actor.Subject);
+            var visibility = document.RootElement.TryGetProperty("notesVisibleToOperators", out var choice) ? choice.GetBoolean() : (bool?)null;
             var access = new SessionOrderPlanningAccess(actor, membershipOptions, customerOptions);
             var store = new OrderPlanningStore(orderOptions, access, clock);
             var receipt = orderId.HasValue
-                ? await store.UpdateAsync(scope, key, orderId.Value, expectedVersion, plan!, ct)
-                : await store.CreateAsync(scope, key, plan!, ct);
+                ? await store.UpdateAsync(scope, key, orderId.Value, expectedVersion, plan!, ct, visibility)
+                : await store.CreateAsync(scope, key, plan!, ct, visibility);
             http.Response.Headers.ETag = receipt.ETag;
             http.Response.Headers.Location = receipt.Location;
             return Results.Content(receipt.Body, "application/json", statusCode: receipt.Status);
@@ -238,8 +240,9 @@ public static partial class DevelopmentOrderEndpoints
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var property in json.EnumerateObject())
         {
-            if (!names.Add(property.Name) || property.Name is not ("customerId" or "plannedReceivingDate" or "plannedDeliveryDate" or "customerReference" or "notes")) return false;
+            if (!names.Add(property.Name) || property.Name is not ("customerId" or "plannedReceivingDate" or "plannedDeliveryDate" or "customerReference" or "notes" or "notesVisibleToOperators")) return false;
         }
+        if (json.TryGetProperty("notesVisibleToOperators", out var visibility) && visibility.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
         if (!json.TryGetProperty("customerId", out var customer) || customer.ValueKind != JsonValueKind.String ||
             !Guid.TryParseExact(customer.GetString(), "D", out var id) || id == Guid.Empty) return false;
         if (!Date(json, "plannedReceivingDate", out var receiving) || !Date(json, "plannedDeliveryDate", out var delivery)) return false;
