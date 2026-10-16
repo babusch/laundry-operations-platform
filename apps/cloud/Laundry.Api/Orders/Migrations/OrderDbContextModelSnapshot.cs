@@ -257,6 +257,92 @@ namespace Laundry.Api.Orders.Migrations
                     b.ToTable("number_counters", "orders");
                 });
 
+            modelBuilder.Entity("Laundry.Api.Orders.OrderPublicationHead", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("ContentFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_fingerprint");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("TenantId", "PlantId", "OrderId");
+
+                    b.ToTable("publication_heads", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_head_version", "version BETWEEN 1 AND 9007199254740991");
+                        });
+                });
+
+            modelBuilder.Entity("Laundry.Api.Orders.OrderPublicationOutboxEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("InitialPublicationActor")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("initial_publication_actor");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "PlantId", "OrderId", "Version")
+                        .IsUnique();
+
+                    b.ToTable("publication_outbox", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_outbox_version", "version BETWEEN 1 AND 9007199254740991");
+                        });
+                });
+
             modelBuilder.Entity("Laundry.Api.Orders.ServiceOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -386,6 +472,26 @@ namespace Laundry.Api.Orders.Migrations
                     b.HasOne("Laundry.Api.Orders.OrderNotesDefault", null)
                         .WithMany()
                         .HasForeignKey("TenantId", "PlantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Laundry.Api.Orders.OrderPublicationHead", b =>
+                {
+                    b.HasOne("Laundry.Api.Orders.ServiceOrder", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PlantId", "OrderId")
+                        .HasPrincipalKey("TenantId", "PlantId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Laundry.Api.Orders.OrderPublicationOutboxEntry", b =>
+                {
+                    b.HasOne("Laundry.Api.Orders.ServiceOrder", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PlantId", "OrderId")
+                        .HasPrincipalKey("TenantId", "PlantId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

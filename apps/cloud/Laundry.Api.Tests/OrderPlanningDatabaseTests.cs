@@ -268,5 +268,8 @@ public sealed partial class OrderPlanningDatabaseTests : IAsyncLifetime
                  permission == OrderPlanningPermissions.EditNotesDefault && CanEditNotesDefault));
         public Task<bool> IsCustomerEligibleAsync(OrderPlanningScope scope, Guid customerId, CancellationToken cancellationToken) =>
             Task.FromResult(scope == permittedScope && (customerId == customer || customerId == AdditionalCustomer));
+        public async Task<OrderPublicationCustomer?> ReadPublicationCustomerAsync(OrderPlanningScope scope, Guid customerId, CancellationToken cancellationToken) =>
+            await IsCustomerEligibleAsync(scope, customerId, cancellationToken)
+                ? new(scope.TenantId, customerId, "DEMO-001", "Synthetic customer") : null;
     }
 }

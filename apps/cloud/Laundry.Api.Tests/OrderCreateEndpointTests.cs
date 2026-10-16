@@ -822,6 +822,8 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
         Assert.True(await access.IsAllowedAsync(scope, OrderPlanningPermissions.Create, default));
         Assert.True(await access.IsAllowedAsync(scope, OrderPlanningPermissions.EditPlan, default));
         Assert.True(await access.IsCustomerEligibleAsync(scope, Customer, default));
+        var publicationCustomer = await access.ReadPublicationCustomerAsync(scope, Customer, default);
+        Assert.Equal(new OrderPublicationCustomer(Tenant, Customer, "DEMO-001", "Demo laundry customer"), publicationCustomer);
         await using var other = new NpgsqlConnection(_postgres.GetConnectionString());
         await other.OpenAsync();
         foreach (var sql in new[] {
@@ -829,6 +831,7 @@ public sealed partial class OrderCreateEndpointTests : IAsyncLifetime
             "DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.create'",
             "DELETE FROM identity_access.plant_membership_permissions WHERE permission = 'orders.plan.edit'",
             "UPDATE customers.laundry_customers SET is_active = false",
+            "UPDATE customers.laundry_customers SET display_name = 'Synthetic concurrent rename', code = 'RENAMED'",
             "UPDATE customers.plant_services SET is_active = false" })
         {
             await using var command = new NpgsqlCommand("SET lock_timeout = '100ms'; " + sql, other);

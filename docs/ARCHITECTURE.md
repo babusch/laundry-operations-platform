@@ -97,6 +97,8 @@ The PWA normally talks to the plant gateway over the LAN. IndexedDB is an emerge
 - Immutable operational events synchronize; current views are projections of accepted state transitions.
 - Ordinary relational tables represent current business state. Full event sourcing is not required.
 
+Cloud planned-order writes stage filtered gateway publication heads and immutable send records in the same relational transaction as the order, audit and command receipt. The customer module supplies locked eligibility/label values, not shared persistence entities. Current access is rechecked before historical receipt return; retries do not stage historical state. The explicit Development initial-publication CLI uses bounded per-order transactions, named loopback target guards and local OS maintenance attribution rather than impersonating a signed-in operator. Source is implemented but not locally activated: both publication migrations remain pending and no local initialization was run. No delivery transport/worker is introduced. See [publication integration](ORDER_PUBLICATION_CONTRACT.md#automatic-staging-on-management-saves) and [initial-publication setup](INITIAL_ORDER_PUBLICATION_SETUP.md).
+
 ## Deployment environments
 
 - Local development: containerized dependencies and device simulators.

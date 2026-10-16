@@ -25,6 +25,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="../../../packages/contracts/examples/order-plan.v1.*.json"
+          Link="Contracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../deploy/local/management-development-client.json"
           Link="Identity/management-development-client.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../deploy/local/keycloak/*.json"

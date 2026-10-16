@@ -60,6 +60,14 @@ public sealed class SessionOrderPlanningAccess(ManagementActor actor,
         }
     }
 
+    public async Task<OrderPublicationCustomer?> ReadPublicationCustomerAsync(OrderPlanningScope scope, Guid customerId, CancellationToken ct)
+    {
+        if (!Matches(scope) || _customers is null || _boundScope != scope)
+            throw new InvalidOperationException("publication_customer_requires_bound_transaction");
+        var labels = await new CustomerStore(_customers).ReadEligibleLabelsForMutationAsync(scope.TenantId, scope.PlantId, customerId, ct);
+        return labels is null ? null : new(scope.TenantId, labels.Id, labels.Code, labels.DisplayName);
+    }
+
     private async ValueTask DisposeBoundContextsAsync()
     {
         if (_customers is not null) await _customers.DisposeAsync();

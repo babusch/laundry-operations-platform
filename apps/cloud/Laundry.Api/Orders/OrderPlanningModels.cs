@@ -30,6 +30,9 @@ public interface IOrderPlanningAccess
     string? ActorDisplayName => null;
     Task<bool> IsAllowedAsync(OrderPlanningScope scope, string permission, CancellationToken cancellationToken);
     Task<bool> IsCustomerEligibleAsync(OrderPlanningScope scope, Guid customerId, CancellationToken cancellationToken);
+    // Required for every new create/edit command; no fallback can silently skip publication.
+    // Production composition resolves and holds this customer snapshot in the owning transaction.
+    Task<OrderPublicationCustomer?> ReadPublicationCustomerAsync(OrderPlanningScope scope, Guid customerId, CancellationToken cancellationToken);
 }
 
 // Relational composition seam: participants join the owning order transaction, not a

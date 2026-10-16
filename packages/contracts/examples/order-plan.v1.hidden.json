@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "tenantId": "11111111-1111-4111-8111-111111111111",
+  "plantId": "22222222-2222-4222-8222-222222222222",
+  "orderId": "44444444-4444-4444-8444-444444444444",
+  "orderNumber": "ORD-000001",
+  "customer": {
+    "id": "33333333-3333-4333-8333-333333333333",
+    "code": "DEMO-001",
+    "displayName": "Synthetic laundry customer"
+  },
+  "plannedReceivingDate": "2030-01-02",
+  "plannedDeliveryDate": "2030-01-03",
+  "status": "planned",
+  "notesVisibleToOperators": false,
+  "notes": null,
+  "version": 2
+}

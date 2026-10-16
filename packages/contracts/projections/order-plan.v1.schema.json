@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:laundry-operations-platform:projections:order-plan:v1",
+  "title": "Published order plan v1",
+  "description": "Read-only, plant-scoped order working copy. Not an operational event, management DTO, or synchronization batch.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "tenantId", "plantId", "orderId", "orderNumber", "customer", "plannedReceivingDate", "plannedDeliveryDate", "status", "notesVisibleToOperators", "notes", "version"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "tenantId": { "$ref": "#/$defs/uuid" },
+    "plantId": { "$ref": "#/$defs/uuid" },
+    "orderId": { "$ref": "#/$defs/uuid" },
+    "orderNumber": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "customer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "code", "displayName"],
+      "properties": {
+        "id": { "$ref": "#/$defs/uuid" },
+        "code": { "type": "string", "minLength": 1, "maxLength": 50, "pattern": "\\S" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" }
+      }
+    },
+    "plannedReceivingDate": { "type": "string", "format": "date" },
+    "plannedDeliveryDate": { "type": "string", "format": "date" },
+    "status": {
+      "description": "Only the currently implemented planned state is supported; later workflow states require contract review/versioning.",
+      "const": "planned"
+    },
+    "notesVisibleToOperators": { "type": "boolean" },
+    "notes": {
+      "description": "Null means no operator note text, and explicitly clears any older working copy. Hidden management text must never be serialized here.",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 2000,
+      "pattern": "\\S"
+    },
+    "version": {
+      "description": "Cloud-owned monotonically increasing revision of this complete published copy within tenant/plant/order. Not a timestamp, feed cursor, schema version, or necessarily the order-row version.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "notesVisibleToOperators": { "const": false } }, "required": ["notesVisibleToOperators"] },
+      "then": { "properties": { "notes": { "const": null } } }
+    }
+  ],
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid",
+      "not": { "const": "00000000-0000-0000-0000-000000000000" }
+    }
+  }
+}

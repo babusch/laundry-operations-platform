@@ -36,7 +36,13 @@ No equipment or reader field is included. Optional hardware attribution can be v
 
 Submit v2 requests to the Development gateway using trusted `https://localhost:7200`, an enrolled source cookie, and its antiforgery token. The gateway validates v2 only, durably stores the request and enriched event with one pending outbox row, then acknowledges it. A retry uses the same event ID and every original request field unchanged, from the same enrolled source. The cloud accepts both current v2 and historical v1 events.
 
-## Evolution rules
+## Published order plan v1 — contract only
+
+`projections/order-plan.v1.schema.json` defines the minimal read-only cloud-to-gateway order working copy, with synthetic visible/hidden examples. It includes scoped order/customer identity and labels, planned dates, the current `planned` status, explicit operator-note visibility and a complete-copy revision. Hidden notes require `notes: null`; customer references, management-only fields and audit identities are rejected. The member is present to explicitly clear older text, but no hidden text is carried.
+
+This is not a deployed feed or an operational event. Its revision must cover customer-label changes as well as order changes, so it is not necessarily the order-row version. Scope authorization, date ordering, filtering at the real publisher, monotonic receiver application, removals and durable delivery need application logic/tests in later slices. See [publication contract](../../docs/ORDER_PUBLICATION_CONTRACT.md).
+
+## Evolution rules (all schemas)
 
 - Correct descriptions without changing the schema's meaning or accepted data.
 - Create a new schema version when adding or removing a field, making an optional field required, changing a field's meaning or representation, or otherwise changing accepted data. The strict v1 schema rejects unknown fields so accidental payload growth is visible.

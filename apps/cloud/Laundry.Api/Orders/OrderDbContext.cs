@@ -11,6 +11,8 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
     public DbSet<OrderNumberCounter> NumberCounters => Set<OrderNumberCounter>();
     public DbSet<OrderNotesDefault> NotesDefaults => Set<OrderNotesDefault>();
     public DbSet<OrderNotesDefaultCommand> NotesDefaultCommands => Set<OrderNotesDefaultCommand>();
+    public DbSet<OrderPublicationHead> PublicationHeads => Set<OrderPublicationHead>();
+    public DbSet<OrderPublicationOutboxEntry> PublicationOutbox => Set<OrderPublicationOutboxEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +68,24 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
         command.HasKey(x => new { x.TenantId, x.PlantId, x.ActorIssuer, x.ActorSubject, x.IdempotencyKey });
         command.HasOne<OrderNotesDefault>().WithMany().HasForeignKey(x => new { x.TenantId, x.PlantId }).OnDelete(DeleteBehavior.Restrict);
 
+        var head = modelBuilder.Entity<OrderPublicationHead>();
+        head.ToTable("publication_heads", "orders", table => table.HasCheckConstraint("ck_publication_head_version", "version BETWEEN 1 AND 9007199254740991"));
+        head.HasKey(x => new { x.TenantId, x.PlantId, x.OrderId });
+        head.HasOne<ServiceOrder>().WithMany().HasForeignKey(x => new { x.TenantId, x.PlantId, x.OrderId })
+            .HasPrincipalKey(x => new { x.TenantId, x.PlantId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        head.Property(x => x.Version).IsConcurrencyToken();
+        head.Property(x => x.ContentFingerprint).HasMaxLength(64);
+        // Text preserves the exact immutable bytes for later retries; never regenerate from a head.
+        head.Property(x => x.Payload).HasColumnType("text");
+        var publication = modelBuilder.Entity<OrderPublicationOutboxEntry>();
+        publication.ToTable("publication_outbox", "orders", table => table.HasCheckConstraint("ck_publication_outbox_version", "version BETWEEN 1 AND 9007199254740991"));
+        publication.HasKey(x => x.Id);
+        publication.HasIndex(x => new { x.TenantId, x.PlantId, x.OrderId, x.Version }).IsUnique();
+        publication.HasOne<ServiceOrder>().WithMany().HasForeignKey(x => new { x.TenantId, x.PlantId, x.OrderId })
+            .HasPrincipalKey(x => new { x.TenantId, x.PlantId, x.Id }).OnDelete(DeleteBehavior.Restrict);
+        publication.Property(x => x.Payload).HasColumnType("text");
+        publication.Property(x => x.InitialPublicationActor).HasMaxLength(200);
+
         foreach (var entity in modelBuilder.Model.GetEntityTypes())
         {
             foreach (var property in entity.GetProperties())
@@ -78,7 +98,7 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         if (ChangeTracker.Entries().Any(x =>
-                (x.Entity is OrderAuditEntry or OrderCommandReceipt or OrderNotesDefaultCommand) &&
+                (x.Entity is OrderAuditEntry or OrderCommandReceipt or OrderNotesDefaultCommand or OrderPublicationOutboxEntry) &&
                 (x.State is EntityState.Modified or EntityState.Deleted)))
         {
             throw new InvalidOperationException("Order history and successful receipts are append-only.");

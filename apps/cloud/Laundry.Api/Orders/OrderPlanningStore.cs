@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -104,7 +103,8 @@ public sealed partial class OrderPlanningStore(DbContextOptions<OrderDbContext> 
             return previous.Result();
         }
 
-        if (!await access.IsCustomerEligibleAsync(scope, plan.CustomerId, ct))
+        var publicationCustomer = await access.ReadPublicationCustomerAsync(scope, plan.CustomerId, ct);
+        if (publicationCustomer is null)
         {
             throw new OrderPlanningException("customer_not_eligible");
         }
@@ -212,6 +212,7 @@ public sealed partial class OrderPlanningStore(DbContextOptions<OrderDbContext> 
             AcceptedAtUtc = now
         };
         db.CommandReceipts.Add(receipt);
+        await OrderPublicationStorage.StageAsync(db, scope.TenantId, scope.PlantId, order, publicationCustomer, timeProvider, ct: ct);
         await db.SaveChangesAsync(ct);
         // PostgreSQL jsonb canonicalizes property order. First acceptance and retries return
         // the same stored acknowledgement, rather than differently formatted JSON strings.
@@ -241,9 +242,5 @@ public sealed partial class OrderPlanningStore(DbContextOptions<OrderDbContext> 
     }, JsonOptions);
 
     private static Task LockPlantAsync(OrderDbContext db, OrderPlanningScope scope, CancellationToken ct)
-    {
-        var lockKey = BinaryPrimitives.ReadInt64BigEndian(SHA256.HashData(Encoding.UTF8.GetBytes(
-            $"order-planning:{scope.TenantId:D}:{scope.PlantId:D}")));
-        return db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({lockKey})", ct);
-    }
+        => OrderPublicationStorage.LockPlantAsync(db, scope.TenantId, scope.PlantId, ct);
 }

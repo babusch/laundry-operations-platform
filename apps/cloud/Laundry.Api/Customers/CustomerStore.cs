@@ -27,14 +27,18 @@ public sealed class CustomerStore(CustomerDbContext database) : ICustomerPlantEl
 
     // Hold customer and its exact service link through the owning business transaction.
     public async Task<bool> IsEligibleForMutationAsync(Guid tenantId, Guid plantId, Guid customerId, CancellationToken ct = default)
+        => await ReadEligibleLabelsForMutationAsync(tenantId, plantId, customerId, ct) is not null;
+
+    // Return only a value contract; row locks hold both eligibility and labels until commit.
+    public async Task<CustomerChoice?> ReadEligibleLabelsForMutationAsync(Guid tenantId, Guid plantId, Guid customerId, CancellationToken ct = default)
     {
         if (database.Database.CurrentTransaction is null) throw new InvalidOperationException("Mutation eligibility requires the owning transaction.");
         var customer = await database.Customers.FromSqlInterpolated($"SELECT * FROM customers.laundry_customers WHERE tenant_id = {tenantId} AND id = {customerId} FOR SHARE")
             .AsNoTracking().SingleOrDefaultAsync(ct);
-        if (customer is null || !customer.IsActive) return false;
+        if (customer is null || !customer.IsActive) return null;
         var service = await database.PlantServices.FromSqlInterpolated($"SELECT * FROM customers.plant_services WHERE tenant_id = {tenantId} AND plant_id = {plantId} AND customer_id = {customerId} FOR SHARE")
             .AsNoTracking().SingleOrDefaultAsync(ct);
-        return service is { IsActive: true };
+        return service is { IsActive: true } ? new(customer.Id, customer.Code, customer.DisplayName) : null;
     }
 
     // Bounded Development preview, not a production paginated customer-management API.

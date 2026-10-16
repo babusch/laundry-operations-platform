@@ -8,10 +8,20 @@ using Microsoft.EntityFrameworkCore;
 
 const string managementBootstrapFlag = "--initialize-development-management-access";
 const string customerBootstrapFlag = "--initialize-development-customer";
+const string publicationBootstrapFlag = "--initialize-development-order-publications";
 var initializeManagement = args.Contains(managementBootstrapFlag, StringComparer.Ordinal);
 var initializeCustomer = args.Contains(customerBootstrapFlag, StringComparer.Ordinal);
-if (initializeManagement && initializeCustomer) throw new InvalidOperationException("Choose one Development setup command.");
-var builder = WebApplication.CreateBuilder(args.Where(value => value != managementBootstrapFlag && value != customerBootstrapFlag).ToArray());
+var initializePublications = args.Contains(publicationBootstrapFlag, StringComparer.Ordinal);
+if ((initializeManagement ? 1 : 0) + (initializeCustomer ? 1 : 0) + (initializePublications ? 1 : 0) > 1 ||
+    args.Count(value => value == publicationBootstrapFlag) > 1)
+    throw new InvalidOperationException("Choose one Development setup command.");
+var builder = WebApplication.CreateBuilder(args.Where(value => value != managementBootstrapFlag && value != customerBootstrapFlag && value != publicationBootstrapFlag).ToArray());
+
+if (initializePublications)
+{
+    Environment.ExitCode = await DevelopmentInitialOrderPublication.ExecuteCommandAsync(builder.Environment, builder.Configuration);
+    return;
+}
 
 if (initializeCustomer)
 {
