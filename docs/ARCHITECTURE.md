@@ -92,12 +92,16 @@ The PWA normally talks to the plant gateway over the LAN. IndexedDB is an emerge
 
 ## Data ownership
 
+Latest local activation (2026-10-17): the download-position migration is applied, with existing evidence preserved and three copies positioned 1–3. Management remains stopped, downloading remains disabled and no download permission or gateway receiver is active. The earlier implementation-status paragraphs below predate this operational activation.
+
+The cloud now also implements an opt-in Development gateway order-download route, backed by transactional per-plant change positions and protected scope/epoch-bound bookmarks. It serves only current published copies, never superseded outbox payloads. The new migration is prepared but not locally applied, and no gateway receiver/worker is added. See [ADR 0020](decisions/0020-current-order-download-progress.md) and [download contract](ORDER_DOWNLOAD_CONTRACT.md). The earlier publication migrations, three-order initialization and management restart were activated on 2026-10-16; historical pending-activation descriptions below predate that activation.
+
 - The gateway is authoritative for whether a local event was durably accepted while disconnected.
 - The cloud is authoritative for consolidated state across plants.
 - Immutable operational events synchronize; current views are projections of accepted state transitions.
 - Ordinary relational tables represent current business state. Full event sourcing is not required.
 
-Cloud planned-order writes stage filtered gateway publication heads and immutable send records in the same relational transaction as the order, audit and command receipt. The customer module supplies locked eligibility/label values, not shared persistence entities. Current access is rechecked before historical receipt return; retries do not stage historical state. The explicit Development initial-publication CLI uses bounded per-order transactions, named loopback target guards and local OS maintenance attribution rather than impersonating a signed-in operator. Source is implemented but not locally activated: both publication migrations remain pending and no local initialization was run. No delivery transport/worker is introduced. See [publication integration](ORDER_PUBLICATION_CONTRACT.md#automatic-staging-on-management-saves) and [initial-publication setup](INITIAL_ORDER_PUBLICATION_SETUP.md).
+Cloud planned-order writes stage filtered gateway publication heads and immutable send records in the same relational transaction as the order, audit and command receipt. The customer module supplies locked eligibility/label values, not shared persistence entities. Current access is rechecked before historical receipt return; retries do not stage historical state. The explicit Development initial-publication CLI uses bounded per-order transactions, named loopback target guards and local OS maintenance attribution rather than impersonating a signed-in operator. These earlier publication migrations and local initialization were activated on 2026-10-16. The new download-position migration remains pending and must precede starting this updated writer build. No gateway delivery worker is introduced. See [publication integration](ORDER_PUBLICATION_CONTRACT.md#automatic-staging-on-management-saves), [initial-publication setup](INITIAL_ORDER_PUBLICATION_SETUP.md) and [download contract](ORDER_DOWNLOAD_CONTRACT.md).
 
 ## Deployment environments
 

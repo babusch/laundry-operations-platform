@@ -79,21 +79,21 @@ public sealed class ScanIngestionFixture : IAsyncLifetime
         string? tenant = DefaultTenant, string? plant = DefaultPlant,
         bool includePermission = true, DateTime? expires = null,
         string issuer = TestIssuer, string audience = TestAudience,
-        SecurityKey? signingKey = null)
+        SecurityKey? signingKey = null, string permission = "scans.ingest")
     {
         var client = (application ?? Application).CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer",
-            CreateToken(tenant, plant, includePermission, expires, issuer, audience, signingKey));
+            CreateToken(tenant, plant, includePermission, expires, issuer, audience, signingKey, permission));
         return client;
     }
 
     private string CreateToken(string? tenant, string? plant, bool includePermission,
-        DateTime? expires, string issuer, string audience, SecurityKey? signingKey)
+        DateTime? expires, string issuer, string audience, SecurityKey? signingKey, string permission)
     {
         var claims = new List<Claim> { new("client_id", "gateway-testing") };
         if (tenant is not null) claims.Add(new("tenant_id", tenant));
         if (plant is not null) claims.Add(new("plant_id", plant));
-        if (includePermission) claims.Add(new("laundry_permissions", "scans.ingest"));
+        if (includePermission) claims.Add(new("laundry_permissions", permission));
         var tokenExpiry = expires ?? DateTime.UtcNow.AddMinutes(5);
         var token = new JwtSecurityToken(issuer, audience, claims,
             notBefore: tokenExpiry.AddMinutes(-10),

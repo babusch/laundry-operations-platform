@@ -14,6 +14,15 @@ public sealed class OrderPublicationHead
     public long Version { get; set; }
     public string ContentFingerprint { get; set; } = "";
     public string Payload { get; set; } = "";
+    public long ChangePosition { get; set; }
+}
+
+public sealed class OrderPublicationFeedState
+{
+    public Guid TenantId { get; set; }
+    public Guid PlantId { get; set; }
+    public Guid Epoch { get; set; }
+    public long LastPosition { get; set; }
 }
 
 // Immutable ready-to-send evidence. Delivery bookkeeping belongs to a later slice.
@@ -77,6 +86,9 @@ public static class OrderPublicationStorage
             head = new() { TenantId = tenantId, PlantId = plantId, OrderId = order.Id };
             db.PublicationHeads.Add(head);
         }
+        // Transactional row counter, never a PostgreSQL sequence or timestamp. The plant lock
+        // remains held through commit, so a reader cannot advance past an uncommitted writer.
+        head.ChangePosition = await OrderPlanDownloadStore.AllocatePositionAsync(db, tenantId, plantId, ct);
         head.Version = version; head.Payload = payload; head.ContentFingerprint = fingerprint;
         db.PublicationOutbox.Add(new()
         {

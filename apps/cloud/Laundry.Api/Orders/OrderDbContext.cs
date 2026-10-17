@@ -12,6 +12,7 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
     public DbSet<OrderNotesDefault> NotesDefaults => Set<OrderNotesDefault>();
     public DbSet<OrderNotesDefaultCommand> NotesDefaultCommands => Set<OrderNotesDefaultCommand>();
     public DbSet<OrderPublicationHead> PublicationHeads => Set<OrderPublicationHead>();
+    public DbSet<OrderPublicationFeedState> PublicationFeedStates => Set<OrderPublicationFeedState>();
     public DbSet<OrderPublicationOutboxEntry> PublicationOutbox => Set<OrderPublicationOutboxEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -77,6 +78,15 @@ public sealed class OrderDbContext(DbContextOptions<OrderDbContext> options) : D
         head.Property(x => x.ContentFingerprint).HasMaxLength(64);
         // Text preserves the exact immutable bytes for later retries; never regenerate from a head.
         head.Property(x => x.Payload).HasColumnType("text");
+        head.HasIndex(x => new { x.TenantId, x.PlantId, x.ChangePosition }).IsUnique();
+        head.ToTable("publication_heads", "orders", table => table.HasCheckConstraint("ck_publication_head_position", "change_position > 0"));
+        var feed = modelBuilder.Entity<OrderPublicationFeedState>();
+        feed.ToTable("publication_feed_states", "orders", table =>
+        {
+            table.HasCheckConstraint("ck_publication_feed_position", "last_position > 0");
+            table.HasCheckConstraint("ck_publication_feed_epoch", "epoch <> '00000000-0000-0000-0000-000000000000'::uuid");
+        });
+        feed.HasKey(x => new { x.TenantId, x.PlantId });
         var publication = modelBuilder.Entity<OrderPublicationOutboxEntry>();
         publication.ToTable("publication_outbox", "orders", table => table.HasCheckConstraint("ck_publication_outbox_version", "version BETWEEN 1 AND 9007199254740991"));
         publication.HasKey(x => x.Id);

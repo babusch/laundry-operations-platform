@@ -64,6 +64,7 @@ builder.Services.AddDevelopmentManagementAuthentication(builder.Configuration, b
 builder.Services.AddDevelopmentManagementAccess(builder.Configuration, builder.Environment);
 builder.Services.AddDevelopmentCustomers(builder.Configuration, builder.Environment);
 builder.Services.AddDevelopmentOrderPlanning(builder.Configuration, builder.Environment);
+builder.Services.AddDataProtection();
 builder.Services.AddDbContext<ScanDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Laundry")
         ?? throw new InvalidOperationException("Configure ConnectionStrings:Laundry before using the database.")));
@@ -72,6 +73,7 @@ builder.Services.AddHealthChecks()
 
 var app = builder.Build();
 
+app.UseOrderPlanDownloadBoundary();
 app.UseDevelopmentManagementBoundary();
 app.UseDevelopmentOrderBoundary();
 app.UseAuthentication();
@@ -80,6 +82,7 @@ app.MapDevelopmentManagementSession();
 app.MapDevelopmentManagementAccess();
 app.MapDevelopmentCustomers();
 app.MapDevelopmentOrderPlanning();
+app.MapOrderPlanDownload();
 Laundry.Api.Management.DevelopmentManagementPages.MapDevelopmentManagementPages(app);
 
 if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanIngestion:Enabled"))

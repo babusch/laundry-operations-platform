@@ -24,6 +24,7 @@ ADRs preserve why a consequential decision was made. They are short, immutable a
 - [0017 — Activate trusted scan v2](0017-activate-trusted-scan-v2.md)
 - [0018 — Gateway hosts the station PWA](0018-gateway-hosts-station-pwa.md)
 - [0019 — Management server-owned login session](0019-management-server-owned-login-session.md)
+- [0020 — Scoped current-order downloads with transactional progress](0020-current-order-download-progress.md)
 
 ## Template
 

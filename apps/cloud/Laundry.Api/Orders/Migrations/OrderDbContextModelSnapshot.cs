@@ -257,6 +257,34 @@ namespace Laundry.Api.Orders.Migrations
                     b.ToTable("number_counters", "orders");
                 });
 
+            modelBuilder.Entity("Laundry.Api.Orders.OrderPublicationFeedState", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<Guid>("Epoch")
+                        .HasColumnType("uuid")
+                        .HasColumnName("epoch");
+
+                    b.Property<long>("LastPosition")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_position");
+
+                    b.HasKey("TenantId", "PlantId");
+
+                    b.ToTable("publication_feed_states", "orders", t =>
+                        {
+                            t.HasCheckConstraint("ck_publication_feed_epoch", "epoch <> '00000000-0000-0000-0000-000000000000'::uuid");
+
+                            t.HasCheckConstraint("ck_publication_feed_position", "last_position > 0");
+                        });
+                });
+
             modelBuilder.Entity("Laundry.Api.Orders.OrderPublicationHead", b =>
                 {
                     b.Property<Guid>("TenantId")
@@ -270,6 +298,10 @@ namespace Laundry.Api.Orders.Migrations
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
+
+                    b.Property<long>("ChangePosition")
+                        .HasColumnType("bigint")
+                        .HasColumnName("change_position");
 
                     b.Property<string>("ContentFingerprint")
                         .IsRequired()
@@ -289,8 +321,13 @@ namespace Laundry.Api.Orders.Migrations
 
                     b.HasKey("TenantId", "PlantId", "OrderId");
 
+                    b.HasIndex("TenantId", "PlantId", "ChangePosition")
+                        .IsUnique();
+
                     b.ToTable("publication_heads", "orders", t =>
                         {
+                            t.HasCheckConstraint("ck_publication_head_position", "change_position > 0");
+
                             t.HasCheckConstraint("ck_publication_head_version", "version BETWEEN 1 AND 9007199254740991");
                         });
                 });

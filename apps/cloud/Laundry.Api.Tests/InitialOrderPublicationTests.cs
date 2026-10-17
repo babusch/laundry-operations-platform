@@ -147,7 +147,8 @@ public sealed partial class OrderCreateEndpointTests
         await using var db = new OrderDbContext(_orders);
         var migrator = db.GetService<IMigrator>(); await migrator.MigrateAsync("20261016194052_OrderPublicationStorage");
         Assert.Equal("apply_initial_publication_prerequisite_migrations", (await Assert.ThrowsAsync<InvalidOperationException>(() => InitialRunner().CheckPrerequisitesAsync())).Message);
-        Assert.Empty(await db.PublicationHeads.ToArrayAsync());
+        // At this historical schema version, current-model columns do not exist yet.
+        Assert.Equal(0, await db.PublicationHeads.CountAsync());
         await migrator.MigrateAsync(); await InitialRunner().CheckPrerequisitesAsync();
         Assert.Empty(await db.PublicationHeads.ToArrayAsync()); Assert.False(db.Database.HasPendingModelChanges());
     }

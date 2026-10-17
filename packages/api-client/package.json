@@ -7,7 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "generate": "pnpm run generate:station && pnpm run generate:orders",
+    "generate": "pnpm run generate:station && pnpm run generate:orders && pnpm run generate:order-download",
+    "generate:order-download": "openapi-typescript ../../apps/cloud/Laundry.Api/Orders/OpenApi/order-download.v1.yaml -o src/generated/order-download-api.ts",
     "generate:station": "openapi-typescript ../../apps/edge/Laundry.Edge/OpenApi/station-api.v1.yaml -o src/generated/station-api.ts",
     "generate:orders": "openapi-typescript ../../apps/cloud/Laundry.Api/Orders/OpenApi/orders.v1.yaml -o src/generated/orders-api.ts",
     "typecheck": "tsc --noEmit"

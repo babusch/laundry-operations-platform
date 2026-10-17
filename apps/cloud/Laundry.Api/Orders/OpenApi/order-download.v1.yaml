@@ -1,0 +1,120 @@
+openapi: 3.1.0
+info:
+  title: Development gateway order download
+  version: 1.0.0
+  description: Read-only current published copies. Development loopback HTTPS only; disabled unless OrderPlanDownload:Enabled is true. No delivery acknowledgement or deletion inference.
+servers:
+  - url: https://localhost:7100
+paths:
+  /api/v1/gateway/order-plans:
+    get:
+      operationId: downloadOrderPlans
+      security:
+        - gatewayBearer: []
+      description: Requires orders.download and exactly one valid tenant_id/plant_id claim. Scope is not caller-selectable. An absent cursor starts a full download. Batches are coherent current-state snapshots, not historical event replay; retries can return newer copies.
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+          description: Opaque protected bookmark. Persist atomically with applied copies; retain when hasMore is false. Invalid bookmarks fail explicitly and never imply local deletion.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+      responses:
+        '200':
+          description: Current copies; hasMore only describes this response's snapshot. No acknowledgement of local persistence.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPlanDownloadPage'
+        '400':
+          description: Invalid query or bookmark; do not automatically reset progress.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadError'
+        '401':
+          description: Missing or invalid gateway bearer token.
+        '403':
+          description: Missing permission/scope, or forbidden transport/origin/address.
+        '404':
+          description: Disabled or outside Development.
+        '503':
+          description: Storage unavailable. Retain local copies and bookmark; retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadError'
+components:
+  securitySchemes:
+    gatewayBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    OrderPlanDownloadPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, hasMore]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/PublishedOrderPlan'
+        nextCursor:
+          type: string
+          minLength: 1
+        hasMore:
+          type: boolean
+    PublishedOrderPlan:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, tenantId, plantId, orderId, orderNumber, customer, plannedReceivingDate, plannedDeliveryDate, status, notesVisibleToOperators, notes, version]
+      description: Fields and hidden-note conditional rule reference the canonical JSON Schema.
+      allOf:
+        - $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/allOf/0'
+      properties:
+        schemaVersion:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/schemaVersion'
+        tenantId:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/tenantId'
+        plantId:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/plantId'
+        orderId:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/orderId'
+        orderNumber:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/orderNumber'
+        customer:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/customer'
+        plannedReceivingDate:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/plannedReceivingDate'
+        plannedDeliveryDate:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/plannedDeliveryDate'
+        status:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/status'
+        notesVisibleToOperators:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/notesVisibleToOperators'
+        notes:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/notes'
+        version:
+          $ref: '../../../../../packages/contracts/projections/order-plan.v1.schema.json#/properties/version'
+    DownloadError:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string

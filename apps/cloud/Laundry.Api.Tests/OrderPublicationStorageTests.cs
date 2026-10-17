@@ -249,6 +249,7 @@ public sealed partial class OrderPlanningDatabaseTests
             OrderId = detached.Id,
             Version = 1,
             ContentFingerprint = "synthetic",
+            ChangePosition = 1,
             Payload = "{}"
         });
         var failure = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());

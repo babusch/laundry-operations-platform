@@ -4,6 +4,11 @@ export type { components, operations, paths } from "./generated/station-api";
 export { createOrderPlanningClient } from "./order-client";
 export type { OrderPlanningClient } from "./order-client";
 export type {
+  paths as OrderDownloadPaths,
+  components as OrderDownloadComponents,
+  operations as OrderDownloadOperations,
+} from "./generated/order-download-api";
+export type {
   paths as OrderPlanningPaths,
   components as OrderPlanningComponents,
   operations as OrderPlanningOperations,

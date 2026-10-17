@@ -21,6 +21,8 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 | Production batch | Group processed together through one or more production steps |
 | Process run | Actual execution of a wash, dry, finish, or other machine/program step |
 | Order | Shared customer turnaround through the plant, from incoming receipt through outgoing verification; see [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md) |
+| Published order copy | Filtered read-only cloud-owned order plan for one plant; its revision is separate from the business order version |
+| Download bookmark (cursor) | Opaque cloud-issued progress marker for one plant's published copies, not an order ID or proof that a gateway saved them; see [download contract](ORDER_DOWNLOAD_CONTRACT.md) |
 | Continuous tracking account | Ongoing customer/team receipts and dispatches with exact-item turnaround matching, without requiring daily order creation or completion |
 | Delivery | Collection or distribution movement to a customer location |
 | Scan event | Observation originating from a trusted source at a station; physical equipment attribution is optional and must not claim more assurance than the integration provides |

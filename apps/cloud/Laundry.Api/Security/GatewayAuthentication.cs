@@ -9,6 +9,8 @@ public sealed record GatewayScope(Guid TenantId, Guid PlantId)
     public static bool TryRead(ClaimsPrincipal principal, out GatewayScope? scope)
     {
         scope = null;
+        if (principal.FindAll(GatewayAuthorization.TenantClaim).Count() != 1 ||
+            principal.FindAll(GatewayAuthorization.PlantClaim).Count() != 1) return false;
         var tenant = principal.FindFirstValue(GatewayAuthorization.TenantClaim);
         var plant = principal.FindFirstValue(GatewayAuthorization.PlantClaim);
         if (!Guid.TryParse(tenant, out var tenantId) || tenantId == Guid.Empty ||
@@ -27,6 +29,8 @@ public static class GatewayAuthorization
     public const string Policy = "GatewayScanIngest";
     public const string PermissionClaim = "laundry_permissions";
     public const string IngestPermission = "scans.ingest";
+    public const string OrderDownloadPolicy = "GatewayOrderDownload";
+    public const string OrderDownloadPermission = "orders.download";
     public const string TenantClaim = "tenant_id";
     public const string PlantClaim = "plant_id";
 
@@ -71,6 +75,10 @@ public static class GatewayAuthorization
         services.AddAuthorizationBuilder().AddPolicy(Policy, policy => policy
             .RequireAuthenticatedUser()
             .RequireClaim(PermissionClaim, IngestPermission));
+        services.AddAuthorizationBuilder().AddPolicy(OrderDownloadPolicy, policy => policy
+            .AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser()
+            .RequireClaim(PermissionClaim, OrderDownloadPermission));
         return services;
     }
 }

@@ -1,6 +1,6 @@
 # Published order plan v1
 
-Date: 2026-10-16. Scope: documented/tested payload, mapping, storage, management create/edit integration and an explicit Development initial-publication command. HTTP/feed delivery, sync workers, gateway storage and station UI remain separate steps. Both publication migrations are unapplied locally; the running app has not been restarted with this integration and the initialization command has not been run on local orders.
+Current status (2026-10-17): payload, mapping, storage, management integration and Development initialization are implemented; both earlier migrations were applied locally, three initial copies prepared, and the management app restarted on 2026-10-16. A disabled-by-default [cloud download endpoint and durable progress](ORDER_DOWNLOAD_CONTRACT.md) are implemented; its migration is now applied locally with existing evidence preserved and copies positioned 1–3. The API remains stopped, the route disabled and no download permission granted. Gateway downloading/storage and station UI remain separate steps. Historical implementation entries below describe their respective earlier activation state.
 
 The user approved a minimal read-only cloud-to-gateway order copy. Customer reference stays available in management but is excluded here. Canonical schema: `packages/contracts/projections/order-plan.v1.schema.json`. This is a current-state working-copy contract, not an immutable scan event or the management `OrderDetails` representation.
 
