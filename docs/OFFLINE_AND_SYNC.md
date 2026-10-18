@@ -1,5 +1,7 @@
 # Offline operation and synchronization
 
+The Development [station local-order list](STATION_LOCAL_ORDERS_UI.md) reads durable plant copies only, without triggering a cloud download. Its last successful download-page time is activity metadata, not connectivity/freshness proof. Previously displayed rows may remain explicitly marked after a transient refresh failure; no persistent browser order cache or gateway-outage order workflow is introduced. Scanning continuity remains a separate invariant.
+
 ## Reliability objective
 
 Normal receiving, production, packing, and dispatch scans must continue when internet access or the cloud platform is unavailable. Operators must always know whether an action is accepted locally, synchronized, rejected, or requires attention.
@@ -15,6 +17,12 @@ The user-approved initial secure-slice policy allows enrolled sources with local
 The user interface may show success only after the event is durable in IndexedDB or, preferably, acknowledged by the local gateway. These two states must be visually distinguishable.
 
 ## Planned-order publication: approved note-visibility requirement
+
+Local reading follow-up (2026-10-17): the opt-in Development [order-summary list](LOCAL_ORDER_LIST_API.md) reads local copies without cloud/identity requests or operational writes. It excludes all notes, scopes reads to an authorized enrolled browser's plant and requires separate `orders.read`. Page metadata describes the latest committed download page, including partial/empty polls—not current cloud state. Database failures are 503, never successful empty lists. The route defaults off and no live permission or UI integration was enabled.
+
+One-time receiver follow-up (2026-10-17): the [explicit Development download command](GATEWAY_ORDER_DOWNLOAD_SETUP.md) composes bounded authenticated cloud requests with atomic plant batch application. Saved progress supports rerunning after interruptions; exact in-memory apply retries preserve batch identity after uncertain acknowledgements. Scope/revision fences reject overlapping stale responses. Approved live verification saved three matching published copies, then retained them through an empty caught-up rerun; local progress is revision 2 with two inbox receipts. All existing plant/cloud data was verified unchanged. No automatic polling or scan dependency is enabled. Earlier no-receiver/empty-table descriptions below record previous slices.
+
+Gateway storage follow-up (2026-10-17): [current local copies, atomic bookmark updates and inbox receipts](GATEWAY_ORDER_STORAGE.md) are implemented in source with revision/scope checks, safe retry and complete-batch rollback. The plant migration is applied locally, with all eight existing tables verified unchanged and all three new tables empty; no receiver/worker/UI is connected and the gateway remains stopped. The cloud route/development permission were activated and manually verified earlier; earlier disabled/stopped descriptions below are historical. No real order batch has been persisted in the gateway yet.
 
 Latest activation (2026-10-17): the download-position migration has now been explicitly applied locally with existing records verified unchanged and three heads positioned 1–3. The API remains stopped and the download route remains disabled; no gateway permission or delivery is active. Earlier implementation-status descriptions below predate this activation.
 

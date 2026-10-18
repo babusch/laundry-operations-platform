@@ -1,6 +1,7 @@
-param([switch]$WithAccess, [switch]$WithCustomers, [switch]$WithOrders, [switch]$PromptForSecret, [string]$EnvFile)
+param([switch]$WithAccess, [switch]$WithCustomers, [switch]$WithOrders, [switch]$PromptForSecret, [string]$EnvFile, [switch]$WithOrderDownloads)
 
 $ErrorActionPreference = 'Stop'
+if ($WithOrderDownloads -and -not $WithOrders) { throw 'Use -WithOrders together with -WithOrderDownloads.' }
 
 $repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $projectPath = Join-Path $repositoryRoot 'apps/cloud/Laundry.Api/Laundry.Api.csproj'
@@ -32,7 +33,7 @@ function Read-ManagementDotEnvSecret([string]$path) {
     return $selectedValue
 }
 $settingNames = @('ManagementAuthentication__Enabled', 'ManagementAuthentication__ClientSecret',
-    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId', 'ManagementAccess__Enabled', 'Customers__Enabled', 'OrderPlanning__Enabled')
+    'ManagementAuthentication__Authority', 'ManagementAuthentication__ClientId', 'ManagementAccess__Enabled', 'Customers__Enabled', 'OrderPlanning__Enabled', 'OrderPlanDownload__Enabled')
 $previousSettings = @{}
 foreach ($settingName in $settingNames) {
     $previousSettings[$settingName] = [Environment]::GetEnvironmentVariable($settingName, 'Process')
@@ -104,6 +105,7 @@ try {
     [Environment]::SetEnvironmentVariable('ManagementAccess__Enabled', ($WithAccess.IsPresent -or $WithCustomers.IsPresent -or $WithOrders.IsPresent).ToString(), 'Process')
     [Environment]::SetEnvironmentVariable('Customers__Enabled', ($WithCustomers.IsPresent -or $WithOrders.IsPresent).ToString(), 'Process')
     [Environment]::SetEnvironmentVariable('OrderPlanning__Enabled', $WithOrders.IsPresent.ToString(), 'Process')
+    [Environment]::SetEnvironmentVariable('OrderPlanDownload__Enabled', $WithOrderDownloads.IsPresent.ToString(), 'Process')
     $clientSecret = $null
 
     Write-Host 'Starting the development cloud API with management sign-in enabled.'

@@ -1,4 +1,5 @@
 using Laundry.Edge.Health;
+using Laundry.Edge.Orders;
 using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
 using Laundry.Edge.Security;
@@ -8,7 +9,28 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 
-var builder = WebApplication.CreateBuilder(args);
+var downloadOnce = args.Contains("--download-orders-once", StringComparer.Ordinal);
+var verifyOrderAccess = args.Contains("--verify-local-order-access", StringComparer.Ordinal);
+var builder = WebApplication.CreateBuilder(args.Where(x => x is not ("--download-orders-once" or "--verify-local-order-access")).ToArray());
+if (verifyOrderAccess)
+{
+    try
+    {
+        if (downloadOnce) throw new InvalidOperationException();
+        DevelopmentOrderAccessCommand.Configure(builder);
+    }
+    catch (Exception)
+    {
+        Console.Error.WriteLine("Local order access verification requires the fixed Development installation and cannot combine commands.");
+        Environment.ExitCode = 1;
+        return;
+    }
+}
+if (downloadOnce)
+{
+    Environment.ExitCode = await DevelopmentOrderDownloadCommand.RunAsync(builder.Environment, builder.Configuration);
+    return;
+}
 builder.Services.AddSingleton<SubmissionValidator>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<WorkerDiagnostics>();
@@ -22,6 +44,7 @@ builder.Services.AddHttpClient<CloudDelivery>().ConfigurePrimaryHttpMessageHandl
 builder.Services.AddScoped<OutboxDispatcher>();
 builder.Services.AddScoped<ISourceIdentityResolver, SourceIdentityResolver>();
 builder.Services.AddScoped<BrowserCookieSourceAuthenticator>();
+builder.Services.AddScoped<LocalOrderList>();
 builder.Services.AddHostedService<OutboxWorker>();
 builder.Services.AddAntiforgery(options =>
 {
@@ -49,6 +72,7 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanAcc
     if (new[] { source.TenantId, source.PlantId, source.StationId }.Contains(Guid.Empty))
         throw new InvalidOperationException("Configure nonempty development tenant, plant, and station IDs.");
     app.MapScanAcceptance();
+    if (app.Configuration.GetValue<bool>("LocalOrderList:Enabled")) app.MapLocalOrderList();
     if (app.Configuration.GetValue<bool>("SyncDiagnostics:Enabled")) app.MapSyncDiagnostics(source);
     if (app.Configuration.GetValue<bool>("SourceEnrollment:Enabled"))
         app.MapSourceEnrollment(new SourceScope(source.TenantId, source.PlantId), source.StationId);
@@ -60,6 +84,11 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
     Predicate = check => check.Tags.Contains("ready")
 });
 
+if (verifyOrderAccess)
+{
+    Environment.ExitCode = await DevelopmentOrderAccessCommand.RunAsync(app);
+    return;
+}
 app.Run();
 
 // Separate entry-point type from the cloud API for integration testing.

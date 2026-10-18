@@ -22,6 +22,134 @@ namespace Laundry.Edge.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Laundry.Edge.Orders.LocalOrderPlan", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("ContentFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("content_fingerprint");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTimeOffset>("StoredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("stored_at_utc");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("TenantId", "PlantId", "OrderId");
+
+                    b.ToTable("order_plans", "plant", t =>
+                        {
+                            t.HasCheckConstraint("ck_local_order_revision", "version BETWEEN 1 AND 9007199254740991");
+                        });
+                });
+
+            modelBuilder.Entity("Laundry.Edge.Orders.OrderDownloadBatchReceipt", b =>
+                {
+                    b.Property<Guid>("BatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("batch_id");
+
+                    b.Property<int>("Applied")
+                        .HasColumnType("integer")
+                        .HasColumnName("applied");
+
+                    b.Property<int>("Duplicates")
+                        .HasColumnType("integer")
+                        .HasColumnName("duplicates");
+
+                    b.Property<int>("Older")
+                        .HasColumnType("integer")
+                        .HasColumnName("older");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<long>("ProgressRevision")
+                        .HasColumnType("bigint")
+                        .HasColumnName("progress_revision");
+
+                    b.Property<DateTimeOffset>("RecordedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("recorded_at_utc");
+
+                    b.Property<string>("RequestFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("request_fingerprint");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("BatchId");
+
+                    b.HasIndex("TenantId", "PlantId", "ProgressRevision")
+                        .IsUnique();
+
+                    b.ToTable("order_download_receipts", "plant", t =>
+                        {
+                            t.HasCheckConstraint("ck_order_download_receipt_counts", "applied >= 0 AND duplicates >= 0 AND older >= 0 AND applied + duplicates + older <= 100");
+
+                            t.HasCheckConstraint("ck_order_download_receipt_revision", "progress_revision > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Laundry.Edge.Orders.OrderDownloadProgress", b =>
+                {
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("PlantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plant_id");
+
+                    b.Property<string>("Cursor")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("cursor");
+
+                    b.Property<DateTimeOffset>("LastSuccessfulCheckUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_successful_check_utc");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.HasKey("TenantId", "PlantId");
+
+                    b.ToTable("order_download_progress", "plant", t =>
+                        {
+                            t.HasCheckConstraint("ck_order_download_progress_revision", "revision > 0");
+                        });
+                });
+
             modelBuilder.Entity("Laundry.Edge.Scans.LocalObservation", b =>
                 {
                     b.Property<Guid>("EventId")
@@ -371,6 +499,15 @@ namespace Laundry.Edge.Persistence.Migrations
                     b.HasIndex("TenantId", "PlantId", "EventId");
 
                     b.ToTable("replay_audit", "plant");
+                });
+
+            modelBuilder.Entity("Laundry.Edge.Orders.OrderDownloadBatchReceipt", b =>
+                {
+                    b.HasOne("Laundry.Edge.Orders.OrderDownloadProgress", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "PlantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Laundry.Edge.Scans.OutboxEntry", b =>

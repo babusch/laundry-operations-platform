@@ -1,3 +1,4 @@
+param([switch]$WithOrderDownloads)
 $ErrorActionPreference = 'Stop'
 
 $issuer = 'https://localhost:8443/realms/laundry-development'
@@ -47,9 +48,14 @@ if ($claims.azp -cne $clientId -and $claims.client_id -cne $clientId) { throw 'T
 if ($claims.tenant_id -cne $expectedTenant -or $claims.plant_id -cne $expectedPlant) { throw 'Token plant registration is incorrect.' }
 if ($expectedAudience -notin @($claims.aud)) { throw 'Token is not intended for the cloud API.' }
 if ('scans.ingest' -notin @($claims.realm_access.roles)) { throw 'Gateway lacks scans.ingest permission.' }
-if ($claims.laundry_permissions -cne 'scans.ingest') { throw 'Gateway permission claim is incorrect.' }
+$permissions = @($claims.laundry_permissions)
+if ('scans.ingest' -notin $permissions -or ($WithOrderDownloads -and 'orders.download' -notin $permissions)) {
+    throw 'Gateway permission claim is incorrect.'
+}
+if (@($permissions | Where-Object { $_ -notin @('scans.ingest', 'orders.download') }).Count -ne 0 -or
+    @($permissions | Select-Object -Unique).Count -ne $permissions.Count) { throw 'Unexpected gateway application permissions.' }
 $applicationRoles = @($claims.realm_access.roles | Where-Object { $_ -match '\.' })
-if ($applicationRoles.Count -ne 1 -or $applicationRoles[0] -cne 'scans.ingest') {
+if (@(Compare-Object ($permissions | Sort-Object) ($applicationRoles | Sort-Object)).Count -ne 0) {
     throw 'Gateway has an unexpected application permission.'
 }
 
@@ -57,5 +63,5 @@ $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 if ($claims.exp -le $now -or ($claims.exp - $now) -gt 300) { throw 'Token lifetime is invalid.' }
 
 Write-Host 'Development gateway identity verified.'
-Write-Host 'Invalid credentials are rejected; the valid token is short-lived, scoped to scans.ingest, and registered to the synthetic tenant/plant.'
+Write-Host 'Invalid credentials are rejected; the valid token is short-lived, has only the approved application permissions, and is registered to the synthetic tenant/plant.'
 Write-Host 'No token or credential was printed or stored.'

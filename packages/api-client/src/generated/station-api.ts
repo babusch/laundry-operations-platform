@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/order-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List locally downloaded order summaries for the enrolled station's plant
+         * @description Development-only, opt-in LocalOrderList:Enabled on trusted loopback HTTPS localhost:7200. Requires an active browser source and separate orders.read permission; scans.submit alone is insufficient. Does not call the cloud, grant access or select/start an order. No notes are returned. Ordered by local order UUID. A download progress change invalidates continuation cursors; restart from the first page on 409. No production operator authentication is implemented.
+         */
+        get: operations["getLocalOrderPlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/ready": {
         parameters: {
             query?: never;
@@ -127,6 +147,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        LocalOrderPage: {
+            items: components["schemas"]["LocalOrderSummary"][];
+            /** @description Null when this page has no continuation. */
+            nextCursor: string | null;
+            hasMore: boolean;
+            /**
+             * Format: date-time
+             * @description UTC time of the last committed download page, including empty polls. Null before any download. May describe a partial multi-page download; not proof of catch-up, cloud availability or current freshness.
+             */
+            lastSuccessfulPageAtUtc: string | null;
+        };
+        LocalOrderSummary: {
+            /** Format: uuid */
+            id: string;
+            orderNumber: string;
+            customer: {
+                /** Format: uuid */
+                id: string;
+                code: string;
+                displayName: string;
+            };
+            /** Format: date */
+            plannedReceivingDate: string;
+            /** Format: date */
+            plannedDeliveryDate: string;
+            /** @constant */
+            status: "planned";
+            version: number;
+        };
+        LocalOrderError: {
+            /** @enum {string} */
+            code: "local_order_origin_forbidden" | "local_order_source_required" | "local_order_permission_required" | "invalid_local_order_query" | "invalid_local_order_cursor" | "local_order_list_changed" | "local_order_copy_invalid" | "local_order_storage_unavailable";
+        };
         DevelopmentEnrollment: {
             /** Format: uuid */
             sourceId: string;
@@ -236,6 +289,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description Safe code only. 400 invalid query/cursor; 401 missing/invalid source; 403 permission/origin denied; 409 local order progress changed (restart listing); 503 local authentication/order storage unavailable or copy invalid. Errors do not mean there are no orders. Responses use no-store. No cloud request or order mutation occurs. */
+        LocalOrderFailure: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["LocalOrderError"];
+            };
+        };
         /** @description The request was not accepted. */
         Problem: {
             headers: {
@@ -253,6 +315,44 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getLocalOrderPlans: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description Opaque local list cursor, not the cloud download bookmark. Unknown/repeated query parameters are rejected. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A coherent local page; empty does not prove that a download has occurred. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    Vary?: "Cookie";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalOrderPage"];
+                };
+            };
+            400: components["responses"]["LocalOrderFailure"];
+            401: components["responses"]["LocalOrderFailure"];
+            403: components["responses"]["LocalOrderFailure"];
+            /** @description Route not enabled or host is not Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["LocalOrderFailure"];
+            503: components["responses"]["LocalOrderFailure"];
+        };
+    };
     getGatewayReadiness: {
         parameters: {
             query?: never;

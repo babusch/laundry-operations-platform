@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { LocalOrders } from "./LocalOrders";
+import type { LocalOrderLoader } from "../gateway/local-orders";
 import type { LocalReceipt, SubmitScanV2 } from "@laundry/api-client";
 import { useTranslation } from "react-i18next";
 
@@ -48,6 +50,7 @@ type AppProps = {
     identifier: string,
   ) => SubmitScanV2;
   loadAudit?: () => Promise<SyncAuditSnapshot | null>;
+  loadOrders?: LocalOrderLoader;
 };
 
 function feedbackForReceipt(receipt: LocalReceipt): ScanFeedback {
@@ -141,6 +144,7 @@ export function App({
   submitScan = submitScanToGateway,
   createScanRequest = createSimulatedScan,
   loadAudit = loadSyncAudit,
+  loadOrders,
 }: AppProps) {
   const { t, i18n } = useTranslation();
   const [connection, setConnection] = useState<ConnectionState>("checking");
@@ -159,6 +163,7 @@ export function App({
   const [auditSnapshot, setAuditSnapshot] =
     useState<SyncAuditSnapshot | null>(null);
   const [auditAttempt, setAuditAttempt] = useState(0);
+  const handleOrderSourceRequired = useCallback(() => setEnrollment("notEnrolled"), []);
   const activeLanguage = normalizeLanguage(i18n.resolvedLanguage) ?? "en";
 
   useEffect(() => {
@@ -528,6 +533,7 @@ export function App({
             ) : null}
           </section>
         ) : null}
+        {connection === "ready" && enrollment === "enrolled" ? <LocalOrders load={loadOrders} onSourceRequired={handleOrderSourceRequired} /> : null}
         <p className="scope-note">
           {t("scopeNote")}
         </p>

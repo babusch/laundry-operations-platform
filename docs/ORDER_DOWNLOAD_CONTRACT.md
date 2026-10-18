@@ -1,14 +1,16 @@
 # Gateway order-plan download v1
 
-Date: 2026-10-17. Cloud-side implementation only. No gateway downloader/cache, receiving/dispatch workflow, delivery acknowledgement or production route is enabled.
+Date: 2026-10-17. Cloud-side contract. No receiving/dispatch workflow, cloud delivery acknowledgement or production route is enabled. A separate [one-time Development gateway receiver](GATEWAY_ORDER_DOWNLOAD_SETUP.md) is implemented/tested and live-verified: three published copies saved, followed by an empty caught-up poll with unchanged copies. No automatic worker is activated; earlier empty/unpersisted descriptions below record preceding steps.
 
-Latest local startup: after the approved migration, the updated management API was started using `Start-DevelopmentManagement.ps1 -WithOrders`. Trusted HTTPS checks returned 200 for `/management` and 404 for this disabled download route. No download permission was granted or gateway delivery performed. The stopped-state description in the migration record below predates this startup.
+Gateway follow-up: [local order storage and atomic batch application](GATEWAY_ORDER_STORAGE.md) are implemented separately in source. The plant migration was applied on 2026-10-17 with existing data verified unchanged and all new tables empty. No running downloader, station endpoint/UI or persisted live gateway bookmark is introduced by that slice.
+
+Latest local activation (2026-10-17): the existing development gateway now has separately approved `orders.download`, and the API was restarted with `Start-DevelopmentManagement.ps1 -WithOrders -WithOrderDownloads`. Real token/download/retry checks pass for three copies; cloud business/publication evidence is unchanged. This is a manual read-only smoke check, not a running gateway downloader or persistence acknowledgement. Earlier stopped/disabled/no-grant descriptions below record the preceding implementation and migration steps. See [activation details](#local-development-activation-and-verification).
 
 ## Endpoint and access
 
-`GET /api/v1/gateway/order-plans?cursor=...&limit=100` is mapped only in Development with explicit `OrderPlanDownload:Enabled=true`. The boundary requires loopback, HTTPS and `localhost:7100`. It is disabled by default and the existing management starter does not enable it.
+`GET /api/v1/gateway/order-plans?cursor=...&limit=100` is mapped only in Development with explicit `OrderPlanDownload:Enabled=true`. The boundary requires loopback, HTTPS and `localhost:7100`. It is disabled by default; the management starter enables it only with explicit `-WithOrders -WithOrderDownloads`.
 
-Use the existing signed gateway bearer-token validation with a **separate** `laundry_permissions=orders.download` permission. Management cookies and `scans.ingest` alone do not authorize downloads. Exactly one nonzero valid `tenant_id` and `plant_id` claim establishes scope; request parameters cannot choose another scope. No live identity permission grant is included in this implementation.
+Use the existing signed gateway bearer-token validation with a **separate** `laundry_permissions=orders.download` permission. Management cookies and `scans.ingest` alone do not authorize downloads. Exactly one nonzero valid `tenant_id` and `plant_id` claim establishes scope; request parameters cannot choose another scope. The separately approved local grant is described below; it is not automatic startup/bootstrap behavior.
 
 OpenAPI: `apps/cloud/Laundry.Api/Orders/OpenApi/order-download.v1.yaml`; generated TypeScript types: `packages/api-client/src/generated/order-download-api.ts`. Published fields reference the shared `order-plan.v1` JSON Schema rather than management entities. Runtime returns only stored current filtered payloads, without outbox provenance or management reference fields. Responses use `Cache-Control: no-store`.
 
@@ -68,3 +70,27 @@ git diff --check
 ```
 
 Ran `node --test` inside `packages/contracts`. Inside `packages/api-client`, ran installed `.\node_modules\.bin\openapi-typescript.cmd ../../apps/cloud/Laundry.Api/Orders/OpenApi/order-download.v1.yaml -o src/generated/order-download-api.ts` and `.\node_modules\.bin\tsc.cmd --noEmit`. The standard pnpm generation command initially failed because sandboxed Corepack could not download pinned pnpm; these existing installed tools generated/checked the same sources without installing/updating dependencies. Ran `dotnet format whitespace LaundryOperations.sln --no-restore --include ... --verify-no-changes` for the changed API/security/test files, including the corrected historical-migration fixture.
+
+## Local Development activation and verification
+
+Run from the repository root, only after separately approving the local gateway access change and applying the migration:
+
+```powershell
+.\deploy\local\Initialize-DevelopmentOrderDownloadAccess.ps1
+.\deploy\local\Test-Gateway-Identity.ps1 -WithOrderDownloads
+.\deploy\local\Start-DevelopmentManagement.ps1 -WithOrders -WithOrderDownloads
+# Another terminal, after startup:
+.\deploy\local\Test-DevelopmentOrderDownloads.ps1
+```
+
+The access helper uses only the named local identity authority/realm/client and rejects unexpected client flags, tenant/plant registration, mapper type or existing application roles before modifying access. It enables standard Keycloak administrator audit recording, creates the non-composite realm role if absent, adds it to the existing gateway client scope and service account without removing scan access, and maps resolved scoped realm roles into multivalued `laundry_permissions`. It does not enable full scope, change credentials, edit the startup-import template or grant human order permissions. This follows Keycloak's [resolved realm-role mapper implementation](https://raw.githubusercontent.com/keycloak/keycloak/26.7.3/services/src/main/java/org/keycloak/protocol/oidc/mappers/UserRealmRoleMappingMapper.java). The cloud still independently validates the signed token; decoding a token in the setup helper is only a structural check.
+
+Normal authorized helper execution consumes saved local administrator/gateway credentials internally through Compose configuration; it never prints resolved configuration, credentials, tokens, account IDs or HTTP error bodies. This is not permission for agents to inspect private environment values. Failures emit a run correlation ID, fixed stage and optional HTTP status. Identity administration spans multiple requests, so a later failure can leave earlier scoped grants committed; rerunning reconciles only missing changes. Existing scan access remains in place. A final successful live rerun reported `administrativeChanges=0`. Keycloak omits an empty optional role prefix and can return REST arrays without pipeline enumeration; helpers/tests normalize both representations.
+
+`Initialize-Gateway-Identity.ps1` retains a previously approved role-backed mapper rather than reverting it to a scan-only hardcoded claim. `Test-Gateway-Identity.ps1` rejects unapproved/duplicate application permissions and requires both known permissions with `-WithOrderDownloads`. A cached token issued before the grant may lack download permission until a new token is acquired; the smoke helper obtains a fresh token. Existing short token lifetime/revocation limits still apply.
+
+The startup flag changes only that process and restores the inherited setting when it exits. Plain `-WithOrders` still disables downloading; production remains unmapped. No persistent source setting was changed to default-enable the route.
+
+Verified live on 2026-10-17: valid scoped signed token; three current copies in three one-item pages; unchanged retry content; empty caught-up poll; no-store; missing-token 401; registration/field allowlist and hidden-note checks. Full-row aggregate digests for orders, audits, receipts, numbering, note defaults/commands, human membership/permissions/audits, publication heads/outbox and feed state match before/after. The management page returned 200. No live scan, cloud write, gateway cache, persisted gateway bookmark or delivery receipt was created; a successful GET is not proof of gateway persistence.
+
+Additional commands run: `tests/management/Test-OrderDownloadAccessHelpers.ps1` (isolated grant/idempotency/rejection/partial-outage/baseline-preservation/startup tests), `tests/management/Test-DevelopmentManagementHelper.ps1` (eight cases), and `tests/management/Test-ManagementSecretLoading.ps1` (nine synthetic-fixture cases). All passed, along with PowerShell parsing and `git diff --check`. No C# changes were made for activation, so the earlier 418 cloud/29 focused/30 contract results remain the implementation verification; .NET, gateway, station, browser and cross-component suites were not rerun for this helper/operational slice.

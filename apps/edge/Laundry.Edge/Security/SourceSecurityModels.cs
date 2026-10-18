@@ -41,7 +41,10 @@ public enum SourceSecurityAction
     EnrollmentCompleted,
     CredentialRotated,
     CredentialRevoked,
-    AdministrativeAttemptRejected
+    AdministrativeAttemptRejected,
+    PermissionGranted,
+    PermissionRevoked,
+    VerificationStarted
 }
 
 public enum SourceSecurityOutcome
@@ -53,6 +56,7 @@ public enum SourceSecurityOutcome
 public static class SourcePermissions
 {
     public const string SubmitScans = "scans.submit";
+    public const string ReadOrders = "orders.read";
 }
 
 public sealed record TrustedSource

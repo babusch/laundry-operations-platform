@@ -1,5 +1,9 @@
 # UI design
 
+## Read-only local orders
+
+The Development station's [local-order list](STATION_LOCAL_ORDERS_UI.md) is informational, not an order selector. Keep rows non-interactive, display only allowlisted summaries, label displayed counts honestly and distinguish download activity from freshness. Reserve notice/list space to reduce jumps; preserve visible copies with an explicit warning after transient refresh failures, but clear them when access is lost. Use neutral information, amber access/setup/list-change warnings and coral failures with text/icons. Dates and existing status messages must translate without a new fetch. Do not imply that refreshing this view downloads from the cloud or starts receiving.
+
 ## Required design guidance
 
 Before creating, changing, prototyping, or reviewing a user-facing interface, read and apply:
@@ -44,6 +48,7 @@ In descending order:
 - Use locale-aware formatting for dates, times, numbers, quantities, weights, and currencies. Do not concatenate translated fragments where word order or plural forms may differ.
 - Update the document language for assistive technology and test layouts with every supported language, including narrow screens and enlarged text.
 - Prefer a familiar native language selector with a large touch target. A language change is immediate and does not interrupt or reinterpret in-progress operational work.
+- The station language select uses a decorative CSS chevron inset by the same `0.75rem` as the opposite text padding, with separate right-side space for text. Retain the native select's label and keyboard behavior; restore the native arrow in forced-colors mode. Do not rely on the browser's default edge-hugging arrow placement.
 
 ### Production scan workspace direction
 

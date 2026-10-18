@@ -4,6 +4,61 @@ info:
   version: 1.0.0
   description: Development contract used to generate the station PWA client.
 paths:
+  /api/order-plans:
+    get:
+      operationId: getLocalOrderPlans
+      summary: List locally downloaded order summaries for the enrolled station's plant
+      description: >-
+        Development-only, opt-in LocalOrderList:Enabled on trusted loopback HTTPS localhost:7200.
+        Requires an active browser source and separate orders.read permission; scans.submit alone is insufficient.
+        Does not call the cloud, grant access or select/start an order. No notes are returned.
+        Ordered by local order UUID. A download progress change invalidates continuation cursors;
+        restart from the first page on 409. No production operator authentication is implemented.
+      security:
+        - sourceCookie: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 50
+        - in: query
+          name: cursor
+          description: Opaque local list cursor, not the cloud download bookmark. Unknown/repeated query parameters are rejected.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 2048
+      responses:
+        "200":
+          description: A coherent local page; empty does not prove that a download has occurred.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+            Vary:
+              schema:
+                type: string
+                const: Cookie
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocalOrderPage"
+        "400":
+          $ref: "#/components/responses/LocalOrderFailure"
+        "401":
+          $ref: "#/components/responses/LocalOrderFailure"
+        "403":
+          $ref: "#/components/responses/LocalOrderFailure"
+        "404":
+          description: Route not enabled or host is not Development.
+        "409":
+          $ref: "#/components/responses/LocalOrderFailure"
+        "503":
+          $ref: "#/components/responses/LocalOrderFailure"
   /health/ready:
     get:
       operationId: getGatewayReadiness
@@ -194,6 +249,79 @@ components:
       name: X-Laundry-CSRF
       description: Antiforgery token obtained from the authenticated source session.
   schemas:
+    LocalOrderPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor, hasMore, lastSuccessfulPageAtUtc]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/LocalOrderSummary"
+        nextCursor:
+          type: [string, "null"]
+          maxLength: 2048
+          description: Null when this page has no continuation.
+        hasMore:
+          type: boolean
+        lastSuccessfulPageAtUtc:
+          type: [string, "null"]
+          format: date-time
+          description: >-
+            UTC time of the last committed download page, including empty polls. Null before any download.
+            May describe a partial multi-page download; not proof of catch-up, cloud availability or current freshness.
+    LocalOrderSummary:
+      type: object
+      additionalProperties: false
+      required: [id, orderNumber, customer, plannedReceivingDate, plannedDeliveryDate, status, version]
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customer:
+          type: object
+          additionalProperties: false
+          required: [id, code, displayName]
+          properties:
+            id:
+              type: string
+              format: uuid
+            code:
+              type: string
+            displayName:
+              type: string
+        plannedReceivingDate:
+          type: string
+          format: date
+        plannedDeliveryDate:
+          type: string
+          format: date
+        status:
+          type: string
+          const: planned
+        version:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+    LocalOrderError:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          enum:
+            - local_order_origin_forbidden
+            - local_order_source_required
+            - local_order_permission_required
+            - invalid_local_order_query
+            - invalid_local_order_cursor
+            - local_order_list_changed
+            - local_order_copy_invalid
+            - local_order_storage_unavailable
     DevelopmentEnrollment:
       type: object
       additionalProperties: false
@@ -399,6 +527,15 @@ components:
         instance:
           type: string
   responses:
+    LocalOrderFailure:
+      description: >-
+        Safe code only. 400 invalid query/cursor; 401 missing/invalid source; 403 permission/origin denied;
+        409 local order progress changed (restart listing); 503 local authentication/order storage unavailable or copy invalid.
+        Errors do not mean there are no orders. Responses use no-store. No cloud request or order mutation occurs.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LocalOrderError"
     Problem:
       description: The request was not accepted.
       content:

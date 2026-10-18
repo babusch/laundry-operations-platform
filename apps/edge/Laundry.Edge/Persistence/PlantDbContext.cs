@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Laundry.Edge.Scans;
 using Laundry.Edge.Security;
 using Laundry.Edge.Synchronization;
+using Laundry.Edge.Orders;
 
 namespace Laundry.Edge.Persistence;
 
@@ -15,9 +16,38 @@ public sealed class PlantDbContext(DbContextOptions<PlantDbContext> options) : D
     public DbSet<SourcePermission> SourcePermissions => Set<SourcePermission>();
     public DbSet<SourceEnrollmentCode> SourceEnrollmentCodes => Set<SourceEnrollmentCode>();
     public DbSet<SourceSecurityAudit> SourceSecurityAudits => Set<SourceSecurityAudit>();
+    public DbSet<LocalOrderPlan> LocalOrderPlans => Set<LocalOrderPlan>();
+    public DbSet<OrderDownloadProgress> OrderDownloadProgress => Set<OrderDownloadProgress>();
+    public DbSet<OrderDownloadBatchReceipt> OrderDownloadReceipts => Set<OrderDownloadBatchReceipt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        var plan = modelBuilder.Entity<LocalOrderPlan>();
+        plan.ToTable("order_plans", "plant", table => table.HasCheckConstraint("ck_local_order_revision", "version BETWEEN 1 AND 9007199254740991"));
+        plan.HasKey(x => new { x.TenantId, x.PlantId, x.OrderId });
+        plan.Property(x => x.Version).IsConcurrencyToken();
+        plan.Property(x => x.ContentFingerprint).HasMaxLength(64);
+        plan.Property(x => x.Payload).HasColumnType("text");
+        var progress = modelBuilder.Entity<OrderDownloadProgress>();
+        progress.ToTable("order_download_progress", "plant", table => table.HasCheckConstraint("ck_order_download_progress_revision", "revision > 0"));
+        progress.HasKey(x => new { x.TenantId, x.PlantId });
+        progress.Property(x => x.Revision).IsConcurrencyToken();
+        progress.Property(x => x.Cursor).HasMaxLength(2048);
+        var batch = modelBuilder.Entity<OrderDownloadBatchReceipt>();
+        batch.ToTable("order_download_receipts", "plant", table =>
+        {
+            table.HasCheckConstraint("ck_order_download_receipt_counts", "applied >= 0 AND duplicates >= 0 AND older >= 0 AND applied + duplicates + older <= 100");
+            table.HasCheckConstraint("ck_order_download_receipt_revision", "progress_revision > 0");
+        });
+        batch.HasKey(x => x.BatchId);
+        batch.Property(x => x.BatchId).ValueGeneratedNever();
+        batch.Property(x => x.RequestFingerprint).HasMaxLength(64);
+        batch.HasIndex(x => new { x.TenantId, x.PlantId, x.ProgressRevision }).IsUnique();
+        batch.HasOne<OrderDownloadProgress>().WithMany().HasForeignKey(x => new { x.TenantId, x.PlantId }).OnDelete(DeleteBehavior.Restrict);
+        // Existing plant models map explicitly. Keep these tables equally consistent.
+        foreach (var entityType in new[] { typeof(LocalOrderPlan), typeof(OrderDownloadProgress), typeof(OrderDownloadBatchReceipt) })
+            foreach (var property in modelBuilder.Model.FindEntityType(entityType)!.GetProperties())
+                property.SetColumnName(System.Text.RegularExpressions.Regex.Replace(property.Name, "([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant());
         var scan = modelBuilder.Entity<LocalObservation>();
         scan.ToTable("observations", "plant");
         scan.HasKey(x => x.EventId);
@@ -146,6 +176,8 @@ public sealed class PlantDbContext(DbContextOptions<PlantDbContext> options) : D
 
     private void EnforceSourceSecurityInvariants()
     {
+        if (ChangeTracker.Entries<OrderDownloadBatchReceipt>().Any(x => x.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("Order download receipts are append-only.");
         foreach (var entry in ChangeTracker.Entries<TrustedSource>().Where(x => x.State == EntityState.Modified))
         {
             if (entry.Property(x => x.TenantId).IsModified || entry.Property(x => x.PlantId).IsModified ||

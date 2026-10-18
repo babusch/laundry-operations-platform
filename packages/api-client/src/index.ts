@@ -21,3 +21,5 @@ export type LocalReceipt = components["schemas"]["LocalReceipt"];
 export type SourceSession = components["schemas"]["SourceSession"];
 export type QueueItem = components["schemas"]["QueueItem"];
 export type QueueSummary = components["schemas"]["QueueSummary"];
+export type LocalOrderSummary = components["schemas"]["LocalOrderSummary"];
+export type LocalOrderPage = components["schemas"]["LocalOrderPage"];

@@ -1,5 +1,7 @@
 # Architecture
 
+The Development station PWA now has a [read-only local-order view](STATION_LOCAL_ORDERS_UI.md) over the gateway's generated summary client. It does not call cloud order APIs, select/start orders or persist an additional browser order cache. The existing source authorization and opt-in endpoint boundary remain unchanged.
+
 ## Context
 
 The product combines business administration, shop-floor workflows, and industrial device integration. Cloud availability improves coordination but must not be a prerequisite for normal plant production.
@@ -57,6 +59,12 @@ Use a modular monolith with explicit modules:
 Modules own their domain rules and persistence mappings. Cross-module changes use explicit application contracts. Start with one API deployment and one worker deployment; extract a service only when scaling, availability, security, or independent release requirements justify it.
 
 ## Plant gateway
+
+An explicit Development [order-read access verifier](LOCAL_ORDER_ACCESS_VERIFICATION.md) composes a temporary same-process gateway, fresh browser enrollment and transactionally audited grant/removal/revocation for that source only. It requires no cloud/identity call, suppresses forwarding, refuses an occupied listener and does not change normal startup defaults. Isolation tests and approved live verification pass: three local summaries read, temporary source/credential revoked, temporary host stopped, all pre-existing records unchanged. This is a local setup command, not persistent browser access, production human authorization or a general administration service.
+
+The gateway also has an opt-in Development [local order-summary list API](LOCAL_ORDER_LIST_API.md). It reads only the plant database using scoped source authorization and separate `orders.read`, exposes no notes and makes no cloud/identity calls. Read-only snapshot paging is bound to local download progress; a changed revision requires restarting the list. The feature defaults off, no live station permission is granted, and operator authentication/selection UI remain separate work.
+
+The gateway now also has [published-order storage primitives](GATEWAY_ORDER_STORAGE.md): independent current copies, atomic progress/bookmark updates and immutable payload-free batch receipts in existing plant PostgreSQL. The plant migration was applied locally on 2026-10-17. A separate [one-time Development download command](GATEWAY_ORDER_DOWNLOAD_SETUP.md) composes trusted local registration, authenticated HTTPS responses and these primitives, exiting before web-host/scan-worker startup. Approved live verification saved three matching published copies; a caught-up rerun retained those copies and advanced local progress to revision 2 with two receipts. All pre-existing plant/cloud records were verified unchanged. No automatic worker, additional service/dependency, station order endpoint or UI is added; normal gateway startup does not register the order store or initiate downloads.
 
 See [Local gateway implementation plan](LOCAL_GATEWAY_PLAN.md) for the reviewed checkpoint sequence, scan flow, and storage tradeoffs. The host, local health checks, transactional acceptance/outbox, and Development-only forwarding worker are implemented. The gateway acquires and caches short-lived Keycloak tokens and the cloud validates their permission and tenant/plant scope (ADRs 0012–0013). The refined [station-to-gateway identity and access plan](STATION_GATEWAY_SECURITY_PLAN.md) is approved, and its first implementation slice makes trusted `https://localhost:7200` the primary Development station transport. The station PWA is built independently and bundled into the plant gateway release, which serves it from the same HTTPS origin as `/api` and `/health` ([ADR 0018](decisions/0018-gateway-hosts-station-pwa.md)). Temporary HTTP compatibility remains loopback-only until the protected scan route replaces it. Remote production access, stable plant naming, certificate provisioning, and the installation credential lifecycle remain planned.
 

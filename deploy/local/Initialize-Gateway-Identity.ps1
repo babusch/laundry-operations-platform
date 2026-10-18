@@ -68,6 +68,16 @@ function Set-HardcodedAccessTokenClaim([string]$mapperName, [string]$claimName, 
     $allMappers = Invoke-RestMethod -Method Get -Uri $mappersUri -Headers $headers -TimeoutSec 10
     $existing = @($allMappers | Where-Object { $_.name -ceq $mapperName })
     if ($existing.Count -gt 1) { throw "Duplicate protocol mapper: $mapperName" }
+    # The explicit download-access helper upgrades this mapper to actual scoped roles.
+    # Baseline scan initialization must not silently undo that separately approved grant.
+    if ($claimName -ceq 'laundry_permissions' -and $existing.Count -eq 1 -and
+        $existing[0].protocolMapper -ceq 'oidc-usermodel-realm-role-mapper') {
+        if ($existing[0].config.'claim.name' -cne 'laundry_permissions' -or
+            $existing[0].config.'multivalued' -cne 'true' -or $existing[0].config.'access.token.claim' -cne 'true') {
+            throw 'Unexpected upgraded gateway permission mapper; review before changing it.'
+        }
+        return
+    }
     if ($existing.Count -eq 1) {
         $mapper.id = $existing[0].id
         Invoke-RestMethod -Method Put -Uri "$mappersUri/$($existing[0].id)" -Headers $headers `
