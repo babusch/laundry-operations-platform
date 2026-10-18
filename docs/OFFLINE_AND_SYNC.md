@@ -4,6 +4,8 @@ The Development [station local-order list](STATION_LOCAL_ORDERS_UI.md) reads dur
 
 ## Reliability objective
 
+The [synthetic Development item lookup](DEVELOPMENT_ITEM_LOOKUP.md) uses an in-process fixture catalog and local source authorization only, so it makes no cloud/identity request. It still requires the gateway and its local identity database; their unavailability is an error, never an unknown-item result. It adds no durable reference-data download or emergency browser item cache.
+
 Normal receiving, production, packing, and dispatch scans must continue when internet access or the cloud platform is unavailable. Operators must always know whether an action is accepted locally, synchronized, rejected, or requires attention.
 
 ## Storage layers

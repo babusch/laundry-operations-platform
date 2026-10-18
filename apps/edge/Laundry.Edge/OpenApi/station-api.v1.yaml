@@ -4,6 +4,99 @@ info:
   version: 1.0.0
   description: Development contract used to generate the station PWA client.
 paths:
+  /api/development/scan-preview:
+    post:
+      operationId: previewDevelopmentScan
+      summary: Recognize a synthetic RFID fixture and resolve its customer's downloaded planned orders
+      description: >-
+        Development-only. Requires explicit DevelopmentScanPreview, DevelopmentItemLookup and LocalOrderList enablement,
+        trusted loopback HTTPS localhost:7200, active demo browser source, scans.submit, orders.read and antiforgery.
+        The server derives customer from its fixture catalog; caller scope/customer/order fields and query parameters are forbidden.
+        Reads all relevant local pages, not the visible browser page. Maximum 100 pages of 50 and 50 matching orders;
+        exceeding bounds or concurrent download changes fails without a partial result. No cloud call or business writes.
+        All returned orders are planned, not started/selected/reserved. No notes or customer references.
+      security:
+        - sourceCookie: []
+          antiforgeryHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevelopmentItemLookupRequest"
+      responses:
+        "200":
+          description: Complete bounded preview result; download activity is not freshness proof.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Vary:
+              schema: { type: string, const: Cookie }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DevelopmentScanPreviewResult"
+        "400":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "401":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "403":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "404":
+          description: Feature disabled or host not Development.
+        "409":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "413":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "415":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "503":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+  /api/development/item-lookup:
+    post:
+      operationId: lookupDevelopmentItem
+      summary: Resolve a synthetic RFID fixture locally without recording a scan
+      description: >-
+        Development-only and opt-in DevelopmentItemLookup:Enabled (default false).
+        Trusted loopback HTTPS localhost:7200, active browser source, scans.submit and antiforgery required.
+        Only the fixed demo tenant/plant has fixture data. No cloud call, order selection,
+        receiving activation, database write or production ownership assertion. Request body is bounded to 1024 bytes.
+        Unknown values return notRecognized, not an inferred customer. Query parameters are forbidden.
+      security:
+        - sourceCookie: []
+          antiforgeryHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevelopmentItemLookupRequest"
+      responses:
+        "200":
+          description: Synthetic recognized item or explicit notRecognized result; never echoes the identifier.
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+            Vary:
+              schema: { type: string, const: Cookie }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DevelopmentItemLookupResult"
+        "400":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "401":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "403":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "404":
+          description: Feature disabled, scan acceptance disabled or not Development.
+        "413":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "415":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
+        "503":
+          $ref: "#/components/responses/DevelopmentItemLookupFailure"
   /api/order-plans:
     get:
       operationId: getLocalOrderPlans
@@ -249,6 +342,97 @@ components:
       name: X-Laundry-CSRF
       description: Antiforgery token obtained from the authenticated source session.
   schemas:
+    DevelopmentScanPreviewResult:
+      type: object
+      additionalProperties: false
+      required: [isSynthetic, status, item, orders, lastSuccessfulPageAtUtc]
+      properties:
+        isSynthetic:
+          type: boolean
+          const: true
+        status:
+          type: string
+          enum: [notRecognized, noLocalOrders, onePlannedOrder, multiplePlannedOrders]
+        item:
+          description: Null only when notRecognized; customer comes from the gateway fixture, not caller input.
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/DevelopmentTextileItem"
+        orders:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/LocalOrderSummary"
+        lastSuccessfulPageAtUtc:
+          type: [string, "null"]
+          format: date-time
+          description: Last committed download-page activity; null for unknown item or before a download. Not freshness proof.
+    DevelopmentItemLookupRequest:
+      type: object
+      additionalProperties: false
+      required: [identifier]
+      properties:
+        identifier:
+          type: object
+          additionalProperties: false
+          required: [technology, value]
+          properties:
+            technology:
+              type: string
+              const: rfid
+            value:
+              type: string
+              minLength: 1
+              maxLength: 256
+              description: Exact case-sensitive value; no surrounding whitespace or control characters. Synthetic fixtures only.
+    DevelopmentItemLookupResult:
+      type: object
+      additionalProperties: false
+      required: [isSynthetic, status, item]
+      properties:
+        isSynthetic:
+          type: boolean
+          const: true
+        status:
+          type: string
+          enum: [recognized, notRecognized]
+        item:
+          description: Null for notRecognized; a synthetic fixture for recognized. No tag value or order association.
+          oneOf:
+            - type: "null"
+            - $ref: "#/components/schemas/DevelopmentTextileItem"
+    DevelopmentTextileItem:
+      type: object
+      additionalProperties: false
+      required: [id, displayName, articleType, customer]
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+        articleType:
+          type: string
+          enum: [towel, sheet, mop]
+        customer:
+          type: object
+          additionalProperties: false
+          required: [id, code, displayName]
+          properties:
+            id:
+              type: string
+              format: uuid
+            code:
+              type: string
+            displayName:
+              type: string
+    DevelopmentItemLookupError:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
     LocalOrderPage:
       type: object
       additionalProperties: false
@@ -527,6 +711,17 @@ components:
         instance:
           type: string
   responses:
+    DevelopmentItemLookupFailure:
+      description: Fixed error code only; no identifier, request body, credentials or storage details.
+      headers:
+        Cache-Control:
+          schema: { type: string, const: no-store }
+        Vary:
+          schema: { type: string, const: Cookie }
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DevelopmentItemLookupError"
     LocalOrderFailure:
       description: >-
         Safe code only. 400 invalid query/cursor; 401 missing/invalid source; 403 permission/origin denied;

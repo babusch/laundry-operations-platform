@@ -23,3 +23,6 @@ export type QueueItem = components["schemas"]["QueueItem"];
 export type QueueSummary = components["schemas"]["QueueSummary"];
 export type LocalOrderSummary = components["schemas"]["LocalOrderSummary"];
 export type LocalOrderPage = components["schemas"]["LocalOrderPage"];
+export type DevelopmentItemLookupRequest = components["schemas"]["DevelopmentItemLookupRequest"];
+export type DevelopmentItemLookupResult = components["schemas"]["DevelopmentItemLookupResult"];
+export type DevelopmentScanPreviewResult = components["schemas"]["DevelopmentScanPreviewResult"];

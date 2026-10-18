@@ -52,7 +52,16 @@ Approved initial receiving duration:
 - New accepted receipts update shared totals and reconciliation. Order completion must account for the latest durable receipts, including concurrent work at other stations.
 - Handling new items after whole-order completion remains an open question; this rule does not authorize automatically reopening a completed order.
 
-Proposed selection rules still subject to review: retain a station's explicitly selected suitable order; automatically select when exactly one order is accepting receipts for the identified customer; ask when several qualify; and offer deliberate activation when only planned orders exist. Outgoing selection should use the item's matching incoming record, with explicit resolution when it conflicts with the station's selected order. Dates alone must not resolve ambiguity.
+Approved selection direction (2026-10-18; not implemented):
+
+- Scan-driven selection is the normal flow, not a mandatory manual order picker. The first recognized item identifies its customer. Retain a suitable selected order; otherwise select the sole suitable order already accepting receipts, or ask the operator when several qualify. Do not use dates alone to resolve ambiguity.
+- When a planned order needs activation, the operator chooses/confirms it and confirms **Start receiving on this order** together with the first accepted item, as described above. Scanning does not silently create orders.
+- In the flexible flow, a different customer's item prompts a customer switch. Declining means the item is not counted; switching leaves the previous shared order open and still requires suitable order resolution for the new customer.
+- An operator who already knows the intended order may optionally select and **lock to that order before scanning**. This is an alternative preparation path, not a replacement for scan-driven selection. A planned order's selection/lock alone does not activate receiving.
+- A locked order blocks items from other customers without offering a quick mismatch-switch prompt. Changing or unlocking it requires a separate deliberate action. Matching the customer is necessary but does not bypass item/order reconciliation or authorize reassignment from another order.
+- The lock belongs to the operator's working context. It is not an exclusive reservation or a lock on the shared order: other authorized operators/stations may contribute to the same order. Switching or clearing context does not close an order.
+
+Outgoing selection should use the item's matching incoming record, with explicit resolution when it conflicts with the selected/locked order; it must not silently reassign the item. Exact session persistence, refresh/reconnect behavior, mode defaults/configuration and operator handover rules remain to be reviewed. Earlier suggestions to clear selection on page reload were not approved. Operator authentication is still required before any scan counts as a business action; the existing raw-scan simulator and read-only list do not implement these workflows.
 
 ### Missed receiving scan discovered at dispatch
 
@@ -106,6 +115,8 @@ Supported customer-selection patterns:
 
 - **Automatic/flexible customer:** with no active customer, the first recognized item selects its customer. An item from another customer pauses the flow and asks whether to switch. Declining the switch means that item is not added; accepting changes the station's active customer without closing either customer's order.
 - **Locked customer:** the operator deliberately selects a customer. Items owned by another customer are rejected, and changing customer requires a separate deliberate action rather than a quick mismatch prompt.
+
+The approved optional **locked-order** path is more specific: selecting an order also fixes its customer for the operator's working context. It does not replace the locked-customer requirement or reserve the order against other stations. See the selection rules above; persistence and configuration controls are not yet implemented.
 
 The interface must never silently add one customer's item to another customer's order.
 

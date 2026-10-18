@@ -5,6 +5,8 @@ Status: Source-identity direction and refined device boundary approved 2026-09-2
 
 ## Goal
 
+Operator-session follow-up (2026-10-18): once-per-shift sign-in and a laundry-configurable **15-minute default inactivity lock** are approved. Background RFID reads do not keep a station unlocked; locking preserves the session/work but pauses operational scanning. Password-based unlocking is the initial choice; staff badges are a documented future possibility. Technical password verification and offline human authentication remain under review. See [operator sessions](STATION_OPERATOR_SESSIONS.md); no implementation or change to existing source authentication is implied.
+
 Allow an enrolled browser station or managed device adapter to submit scans to its plant gateway over trusted local HTTPS. The gateway must establish the real source independently of request JSON, continue validating enrolled sources without internet or Keycloak, and preserve the existing durable acceptance and retry behavior.
 
 This is checkpoint 5.4 from [ADR 0009](decisions/0009-identity-permissions-and-offline-access.md). Human login and authorization for diagnostics/replay remain the separate checkpoint 5.5.

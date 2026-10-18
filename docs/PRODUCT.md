@@ -32,6 +32,8 @@ Service-cycle orders are the standard customer workflow. Optional continuous tra
 
 Order creation is manual by default. Automatic creation is an explicit per-customer option; recognizing a customer from a scan does not itself authorize creating an order.
 
+Approved selection direction (2026-10-18; not implemented): scan-driven customer/order resolution is the normal flow, with operator choice when ambiguous. An optional manual selector lets an operator lock their working context to a known order before scanning. Other customers' items are then blocked without a quick switch prompt; changing/unlocking requires a deliberate separate action. The lock does not reserve the shared order or prevent other stations contributing. Selection/locking alone never starts receiving; the first-item activation confirmation below still applies. See [selection and locking rules](LAUNDRY_ORDER_WORKFLOW.md#starting-receiving-and-selecting-an-order).
+
 To begin receiving on a planned order, an operator selects it and confirms starting receiving as part of recording the first incoming item. That activation is shared across the plant. Ordinary operators may also resolve a missed receiving scan discovered at dispatch by confirming the customer/order and recording a reasoned, audited late-receipt correction before dispatch succeeds.
 
 Management can create orders in advance with customer, planned receiving date, and planned delivery date, plus optional customer reference and notes. Actual incoming/outgoing timestamps remain separate from planned dates. Recurring customer schedules should make arrangements such as Monday collection and Wednesday delivery easy to configure; each occurrence has its own service-cycle order. A schedule does not implicitly enable automatic generation. Collection/receipt and dispatch/customer delivery remain distinct milestones; generation policy and calendar exceptions still require review.
@@ -67,6 +69,8 @@ Operators also need explicit ways to record items or quantities that cannot be s
 - The database/backend, protected visibility/default API contracts and Development management controls are implemented; local activation and gateway propagation/recovery remain separate slices. Creation starts from the displayed default, then saves an explicit choice. Planned editing and details use the saved order choice; the plant default has a separately permissioned settings page. Read-only history displays recorded choices without inventing legacy values. See [setup](ORDER_NOTE_VISIBILITY_SETUP.md). This does not activate order-backed scanning or publish notes to gateways.
 
 ## Initial product boundary
+
+Receiving order choices prioritize today's planned receiving dates, followed by future dates chronologically, with earlier dates shown in a separate overdue-receiving section. This is presentation priority, not order activation or automatic selection. Calendar grouping uses the plant's local date; it does not hide earlier/future candidates or imply delivery lateness. See [preview grouping](DEVELOPMENT_SCAN_PREVIEW.md#receiving-date-presentation-2026-10-18).
 
 After receiving starts, valid incoming scans remain allowed until the whole order is completed, including during processing and dispatch. A separate receiving-complete milestone is documented as a deferred proposal in the workflow document and requires future review before implementation.
 

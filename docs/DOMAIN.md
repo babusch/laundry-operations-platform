@@ -2,6 +2,8 @@
 
 This is a starting vocabulary, not a replacement for workshops with plant operators.
 
+The [Development item lookup](DEVELOPMENT_ITEM_LOOKUP.md) resolves fixed synthetic RFID fixtures to item/customer metadata only. Its `recognized` result is not a receipt, order assignment or production ownership assertion; `notRecognized` means absent from that fixture catalog, not necessarily absent from real inventory. Production textile identity/ownership and reference-data synchronization are not implemented by this slice.
+
 ## Core concepts
 
 | Term | Meaning |
@@ -21,6 +23,7 @@ This is a starting vocabulary, not a replacement for workshops with plant operat
 | Production batch | Group processed together through one or more production steps |
 | Process run | Actual execution of a wash, dry, finish, or other machine/program step |
 | Order | Shared customer turnaround through the plant, from incoming receipt through outgoing verification; see [Laundry order workflow](LAUNDRY_ORDER_WORKFLOW.md) |
+| Working-context order lock | Operator's deliberate restriction to one selected order/customer; not an exclusive reservation, shared-order state transition or receiving activation. Approved direction, not implemented. |
 | Published order copy | Filtered read-only cloud-owned order plan for one plant; its revision is separate from the business order version |
 | Download bookmark (cursor) | Opaque cloud-issued progress marker for one plant's published copies, not an order ID or proof that a gateway saved them; see [download contract](ORDER_DOWNLOAD_CONTRACT.md) |
 | Continuous tracking account | Ongoing customer/team receipts and dispatches with exact-item turnaround matching, without requiring daily order creation or completion |

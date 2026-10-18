@@ -4,6 +4,7 @@ using Laundry.Edge.Persistence;
 using Laundry.Edge.Scans;
 using Laundry.Edge.Security;
 using Laundry.Edge.Station;
+using Laundry.Edge.Textiles;
 using Laundry.Edge.Synchronization;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -72,6 +73,10 @@ if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("ScanAcc
     if (new[] { source.TenantId, source.PlantId, source.StationId }.Contains(Guid.Empty))
         throw new InvalidOperationException("Configure nonempty development tenant, plant, and station IDs.");
     app.MapScanAcceptance();
+    if (app.Configuration.GetValue<bool>("DevelopmentItemLookup:Enabled")) app.MapDevelopmentItemLookup();
+    if (app.Configuration.GetValue<bool>("DevelopmentScanPreview:Enabled") &&
+        app.Configuration.GetValue<bool>("DevelopmentItemLookup:Enabled") && app.Configuration.GetValue<bool>("LocalOrderList:Enabled"))
+        app.MapDevelopmentScanPreview();
     if (app.Configuration.GetValue<bool>("LocalOrderList:Enabled")) app.MapLocalOrderList();
     if (app.Configuration.GetValue<bool>("SyncDiagnostics:Enabled")) app.MapSyncDiagnostics(source);
     if (app.Configuration.GetValue<bool>("SourceEnrollment:Enabled"))

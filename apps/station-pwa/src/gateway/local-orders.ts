@@ -12,7 +12,7 @@ function dateOnly(value: unknown): value is string {
   const parsed = new Date(value + "T00:00:00Z");
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
-function summary(value: unknown): LocalOrderSummary | null {
+export function parseLocalOrderSummary(value: unknown): LocalOrderSummary | null {
   if (!record(value) || !exact(value, ["id", "orderNumber", "customer", "plannedReceivingDate", "plannedDeliveryDate", "status", "version"]) ||
     typeof value.id !== "string" || !uuid.test(value.id) || typeof value.orderNumber !== "string" || !value.orderNumber.trim() ||
     !dateOnly(value.plannedReceivingDate) || !dateOnly(value.plannedDeliveryDate) || value.plannedDeliveryDate < value.plannedReceivingDate ||
@@ -45,7 +45,7 @@ export async function loadLocalOrders(cursor?: string, signal?: AbortSignal, gat
       return { kind: "unavailable" };
     const timestamp = data.lastSuccessfulPageAtUtc;
     if (timestamp !== null && (typeof timestamp !== "string" || !/(Z|\+00:00)$/.test(timestamp) || !Number.isFinite(Date.parse(timestamp)))) return { kind: "unavailable" };
-    const items = data.items.map(summary);
+    const items = data.items.map(parseLocalOrderSummary);
     if (items.some((item) => item === null) || new Set(items.map((item) => item!.id)).size !== items.length) return { kind: "unavailable" };
     return { kind: "ready", page: { items: items as LocalOrderSummary[], hasMore: data.hasMore, nextCursor: data.nextCursor as string | null, lastSuccessfulPageAtUtc: timestamp as string | null } };
   } catch { return { kind: "unavailable" }; }

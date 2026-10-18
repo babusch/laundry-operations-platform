@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/development/scan-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recognize a synthetic RFID fixture and resolve its customer's downloaded planned orders
+         * @description Development-only. Requires explicit DevelopmentScanPreview, DevelopmentItemLookup and LocalOrderList enablement, trusted loopback HTTPS localhost:7200, active demo browser source, scans.submit, orders.read and antiforgery. The server derives customer from its fixture catalog; caller scope/customer/order fields and query parameters are forbidden. Reads all relevant local pages, not the visible browser page. Maximum 100 pages of 50 and 50 matching orders; exceeding bounds or concurrent download changes fails without a partial result. No cloud call or business writes. All returned orders are planned, not started/selected/reserved. No notes or customer references.
+         */
+        post: operations["previewDevelopmentScan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/development/item-lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve a synthetic RFID fixture locally without recording a scan
+         * @description Development-only and opt-in DevelopmentItemLookup:Enabled (default false). Trusted loopback HTTPS localhost:7200, active browser source, scans.submit and antiforgery required. Only the fixed demo tenant/plant has fixture data. No cloud call, order selection, receiving activation, database write or production ownership assertion. Request body is bounded to 1024 bytes. Unknown values return notRecognized, not an inferred customer. Query parameters are forbidden.
+         */
+        post: operations["lookupDevelopmentItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/order-plans": {
         parameters: {
             query?: never;
@@ -147,6 +187,52 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        DevelopmentScanPreviewResult: {
+            /** @constant */
+            isSynthetic: true;
+            /** @enum {string} */
+            status: "notRecognized" | "noLocalOrders" | "onePlannedOrder" | "multiplePlannedOrders";
+            /** @description Null only when notRecognized; customer comes from the gateway fixture, not caller input. */
+            item: null | components["schemas"]["DevelopmentTextileItem"];
+            orders: components["schemas"]["LocalOrderSummary"][];
+            /**
+             * Format: date-time
+             * @description Last committed download-page activity; null for unknown item or before a download. Not freshness proof.
+             */
+            lastSuccessfulPageAtUtc: string | null;
+        };
+        DevelopmentItemLookupRequest: {
+            identifier: {
+                /** @constant */
+                technology: "rfid";
+                /** @description Exact case-sensitive value; no surrounding whitespace or control characters. Synthetic fixtures only. */
+                value: string;
+            };
+        };
+        DevelopmentItemLookupResult: {
+            /** @constant */
+            isSynthetic: true;
+            /** @enum {string} */
+            status: "recognized" | "notRecognized";
+            /** @description Null for notRecognized; a synthetic fixture for recognized. No tag value or order association. */
+            item: null | components["schemas"]["DevelopmentTextileItem"];
+        };
+        DevelopmentTextileItem: {
+            /** Format: uuid */
+            id: string;
+            displayName: string;
+            /** @enum {string} */
+            articleType: "towel" | "sheet" | "mop";
+            customer: {
+                /** Format: uuid */
+                id: string;
+                code: string;
+                displayName: string;
+            };
+        };
+        DevelopmentItemLookupError: {
+            code: string;
+        };
         LocalOrderPage: {
             items: components["schemas"]["LocalOrderSummary"][];
             /** @description Null when this page has no continuation. */
@@ -289,6 +375,17 @@ export interface components {
         };
     };
     responses: {
+        /** @description Fixed error code only; no identifier, request body, credentials or storage details. */
+        DevelopmentItemLookupFailure: {
+            headers: {
+                "Cache-Control"?: "no-store";
+                Vary?: "Cookie";
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["DevelopmentItemLookupError"];
+            };
+        };
         /** @description Safe code only. 400 invalid query/cursor; 401 missing/invalid source; 403 permission/origin denied; 409 local order progress changed (restart listing); 503 local authentication/order storage unavailable or copy invalid. Errors do not mean there are no orders. Responses use no-store. No cloud request or order mutation occurs. */
         LocalOrderFailure: {
             headers: {
@@ -315,6 +412,85 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    previewDevelopmentScan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevelopmentItemLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description Complete bounded preview result; download activity is not freshness proof. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    Vary?: "Cookie";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevelopmentScanPreviewResult"];
+                };
+            };
+            400: components["responses"]["DevelopmentItemLookupFailure"];
+            401: components["responses"]["DevelopmentItemLookupFailure"];
+            403: components["responses"]["DevelopmentItemLookupFailure"];
+            /** @description Feature disabled or host not Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: components["responses"]["DevelopmentItemLookupFailure"];
+            413: components["responses"]["DevelopmentItemLookupFailure"];
+            415: components["responses"]["DevelopmentItemLookupFailure"];
+            503: components["responses"]["DevelopmentItemLookupFailure"];
+        };
+    };
+    lookupDevelopmentItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevelopmentItemLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description Synthetic recognized item or explicit notRecognized result; never echoes the identifier. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    Vary?: "Cookie";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevelopmentItemLookupResult"];
+                };
+            };
+            400: components["responses"]["DevelopmentItemLookupFailure"];
+            401: components["responses"]["DevelopmentItemLookupFailure"];
+            403: components["responses"]["DevelopmentItemLookupFailure"];
+            /** @description Feature disabled, scan acceptance disabled or not Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            413: components["responses"]["DevelopmentItemLookupFailure"];
+            415: components["responses"]["DevelopmentItemLookupFailure"];
+            503: components["responses"]["DevelopmentItemLookupFailure"];
+        };
+    };
     getLocalOrderPlans: {
         parameters: {
             query?: {

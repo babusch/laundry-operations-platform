@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SubmitScanV2 } from "@laundry/api-client";
 
@@ -133,8 +133,9 @@ describe("station application foundation", () => {
     expect(screen.getAllByText("Synchronized")).toHaveLength(2);
     expect(screen.getByText("Waiting")).toBeInTheDocument();
     expect(screen.getByText("Needs attention")).toBeInTheDocument();
-    expect(screen.queryByText(/SIMULATED-RFID/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(auditSnapshot.recent[0]!.eventId)).not.toBeInTheDocument();
+    const audit = within(screen.getByRole("region", { name: "Synchronization audit" }));
+    expect(audit.queryByText(/SIMULATED-RFID/i)).not.toBeInTheDocument();
+    expect(audit.queryByText(auditSnapshot.recent[0]!.eventId)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh audit" }));
     await waitFor(() => expect(loadAudit).toHaveBeenCalledTimes(2));

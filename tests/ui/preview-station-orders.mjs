@@ -12,6 +12,24 @@ createServer(async (request, response) => {
   const view = new URL(request.headers.referer ?? url.href).searchParams.get("state") ?? "ready";
   if (url.pathname === "/health/ready") { response.end("Healthy"); return; }
   if (url.pathname === "/api/source-session") { json(response, { sourceId: ids[0], stationId: ids[1], permissions: ["scans.submit", "orders.read"], antiforgeryToken: "synthetic-only", antiforgeryHeaderName: "X-Laundry-CSRF" }); return; }
+  if (["/api/development/item-lookup", "/api/development/scan-preview"].includes(url.pathname) && request.method === "POST") {
+    if (view === "preview-changed") { json(response, {}, 409); return; }
+    if (view === "preview-limit") { json(response, { code: "development_scan_preview_limit_exceeded" }, 503); return; }
+    if (view === "lookup-loading") { setTimeout(() => { if (!response.destroyed) json(response, { code: "fixture-only" }, 503); }, 20000); return; }
+    const status = { "lookup-forbidden": 403, "lookup-disabled": 404, "lookup-unavailable": 503, "lookup-invalid": 400 }[view];
+    if (status) { json(response, { code: "fixture-only" }, status); return; }
+    let body = "";
+    for await (const chunk of request) { body += chunk; if (body.length > 1024) { json(response, {}, 413); return; } }
+    let value;
+    try { value = JSON.parse(body).identifier?.value; } catch { json(response, {}, 400); return; }
+    const article = { "SIMULATED-RFID-TOWEL-001": "towel", "SIMULATED-RFID-SHEET-001": "sheet", "SIMULATED-RFID-MOP-001": "mop" }[value];
+    const item = article ? { id: ids[1], displayName: `Synthetic ${article} fixture`, articleType: article, customer: { id: ids[0], code: "QA-ONLY", displayName: "Synthetic preview customer" } } : null;
+    if (url.pathname.endsWith("scan-preview")) {
+      const orders = !article || article === "mop" ? [] : view === "preview-one" ? items.slice(0, 1) : items;
+      json(response, { isSynthetic: true, status: !article ? "notRecognized" : orders.length === 0 ? "noLocalOrders" : orders.length === 1 ? "onePlannedOrder" : "multiplePlannedOrders", item, orders, lastSuccessfulPageAtUtc: article ? "2030-01-01T12:00:00Z" : null }); return;
+    }
+    json(response, { isSynthetic: true, status: article ? "recognized" : "notRecognized", item }); return;
+  }
   if (url.pathname === "/api/order-plans") {
     reads++;
     if (view === "loading") { setTimeout(() => { if (!response.destroyed) json(response, { code: "fixture-timeout" }, 503); }, 20000); return; }

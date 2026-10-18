@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { LocalOrders } from "./LocalOrders";
+import { ItemLookup } from "./ItemLookup";
+import type { ScanPreview as ItemLookupLoader } from "../gateway/scan-preview";
 import type { LocalOrderLoader } from "../gateway/local-orders";
 import type { LocalReceipt, SubmitScanV2 } from "@laundry/api-client";
 import { useTranslation } from "react-i18next";
@@ -51,6 +53,7 @@ type AppProps = {
   ) => SubmitScanV2;
   loadAudit?: () => Promise<SyncAuditSnapshot | null>;
   loadOrders?: LocalOrderLoader;
+  lookupItem?: ItemLookupLoader;
 };
 
 function feedbackForReceipt(receipt: LocalReceipt): ScanFeedback {
@@ -145,6 +148,7 @@ export function App({
   createScanRequest = createSimulatedScan,
   loadAudit = loadSyncAudit,
   loadOrders,
+  lookupItem,
 }: AppProps) {
   const { t, i18n } = useTranslation();
   const [connection, setConnection] = useState<ConnectionState>("checking");
@@ -399,6 +403,9 @@ export function App({
           <p className="setup-guidance">
             {t("setup.httpsGuidance")}
           </p>
+        ) : null}
+        {connection === "ready" && enrollment === "enrolled" ? (
+          <ItemLookup lookup={lookupItem} onSourceRequired={handleOrderSourceRequired} />
         ) : null}
         {connection === "ready" && enrollment === "enrolled" ? (
           <section className="scan-simulator" aria-labelledby="scan-simulator-title">

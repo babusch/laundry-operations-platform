@@ -1,5 +1,7 @@
 # Architecture
 
+Development scan preview now orchestrates the synthetic Textiles catalog and the existing scoped local-order reader in the gateway. Matching requires both source permissions and reads all bounded continuation pages; the PWA only chooses a preview. No cloud dependency, new datastore or production workflow boundary is introduced. See [development scan preview](DEVELOPMENT_SCAN_PREVIEW.md).
+
 The Development station PWA now has a [read-only local-order view](STATION_LOCAL_ORDERS_UI.md) over the gateway's generated summary client. It does not call cloud order APIs, select/start orders or persist an additional browser order cache. The existing source authorization and opt-in endpoint boundary remain unchanged.
 
 ## Context
@@ -59,6 +61,8 @@ Use a modular monolith with explicit modules:
 Modules own their domain rules and persistence mappings. Cross-module changes use explicit application contracts. Start with one API deployment and one worker deployment; extract a service only when scaling, availability, security, or independent release requirements justify it.
 
 ## Plant gateway
+
+An opt-in [Development-only item lookup](DEVELOPMENT_ITEM_LOOKUP.md) now lives in the gateway's `Textiles` area. It resolves three fixed synthetic RFID fixtures locally after source authorization, with no cloud call, database writes or production registry. Fixture scope is restricted to the demo installation; the route defaults off. A separately labelled lookup-only station panel now consumes its generated contract and is live-verified under intentional process-only local activation. It never invokes scan/order commands. This is not production reference-data storage/synchronization, ownership management, order selection or receiving.
 
 An explicit Development [order-read access verifier](LOCAL_ORDER_ACCESS_VERIFICATION.md) composes a temporary same-process gateway, fresh browser enrollment and transactionally audited grant/removal/revocation for that source only. It requires no cloud/identity call, suppresses forwarding, refuses an occupied listener and does not change normal startup defaults. Isolation tests and approved live verification pass: three local summaries read, temporary source/credential revoked, temporary host stopped, all pre-existing records unchanged. This is a local setup command, not persistent browser access, production human authorization or a general administration service.
 
