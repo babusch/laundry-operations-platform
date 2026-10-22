@@ -4,6 +4,83 @@
  */
 
 export interface paths {
+    "/operator/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Navigate to Development-only operator sign-in (not a fetch-based login)
+         * @description Opt-in Development loopback HTTPS localhost:7200 only. Requires active enrolled browser source. No query parameters or return URL accepted. Uses separate operator-development code/PKCE client. Framework callback /operator/signin-oidc is not a general application command. Does not grant permissions, establish station ownership, unlock or start receiving.
+         */
+        get: operations["beginOperatorIdentityProof"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operator/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read safe identity-only proof status; never operational authorization
+         * @description Development-only. Cookie proof is bound to current source/tenant/plant/station, fixed at 15 minutes without sliding renewal and invalidated by local sign-out or process restart. No tokens, internal subjects, roles or source IDs are returned. No identity-provider call. Responses use no-store, Vary Cookie and Referrer-Policy no-referrer.
+         */
+        get: operations["getOperatorIdentityProof"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operator/antiforgery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Issue a CSRF token bound to the operator identity proof */
+        get: operations["getOperatorIdentityAntiforgery"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operator/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove this browser proof's server ticket and cookie locally
+         * @description Development-only, no-store. Requires CSRF issued by /operator/antiforgery, not an anonymous source-session token. No Keycloak call, provider-wide logout, source revocation or order change. Other tabs sharing this proof lose it on their next request; separate browser proofs are not a station session.
+         */
+        post: operations["signOutOperatorIdentityProof"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/development/scan-preview": {
         parameters: {
             query?: never;
@@ -187,6 +264,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        OperatorIdentityProof: {
+            /** @constant */
+            authenticated: true;
+            displayName: string | null;
+            /** Format: date-time */
+            expiresAtUtc: string;
+            /** @constant */
+            operationalAccessEnabled: false;
+        };
         DevelopmentScanPreviewResult: {
             /** @constant */
             isSynthetic: true;
@@ -412,6 +498,219 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    beginOperatorIdentityProof: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the configured identity provider. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Query parameters rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Valid enrolled browser source required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Transport/origin boundary rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature unavailable or not Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Provider rejected client authentication; no fallback. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Identity provider or source storage unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getOperatorIdentityProof: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated identity proof only; operationalAccessEnabled is always false. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorIdentityProof"];
+                };
+            };
+            /** @description Missing */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Transport/origin boundary rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature unavailable or not Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Source storage unavailable; not anonymous success. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getOperatorIdentityAntiforgery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fresh request token; no-store. Does not renew the proof. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        headerName: "X-Laundry-CSRF";
+                        requestToken: string;
+                    };
+                };
+            };
+            /** @description Valid proof and enrolled source required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Transport/origin boundary rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature unavailable or not Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Source storage unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    signOutOperatorIdentityProof: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server ticket removed and cookie cleared. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Missing or invalid operator-bound antiforgery token. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Valid proof and enrolled source required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Transport/origin boundary rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Feature unavailable or not Development. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Source storage unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     previewDevelopmentScan: {
         parameters: {
             query?: never;

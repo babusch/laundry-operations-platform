@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="../../../deploy/local/operator-development-client.json" Link="Identity/operator-development-client.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../../packages/contracts/examples/order-plan.v1.*.json" Link="Contracts/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.11" />

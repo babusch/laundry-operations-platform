@@ -1,5 +1,7 @@
 # Architecture
 
+The gateway now has a disabled-by-default [Development operator identity proof](STATION_OPERATOR_IDENTITY_SETUP.md), independent from management login and source enrollment: separate confidential Keycloak client, framework code/PKCE login, source-bound safe status and local CSRF-protected sign-out. An opaque browser cookie references a bounded in-memory ticket with fixed 15-minute test expiry; restart invalidates it. No shift-session persistence, grant, inactivity lock, password unlock or operational authorization is implied. See [ADR 0021](decisions/0021-development-station-operator-identity-proof.md).
+
 Development scan preview now orchestrates the synthetic Textiles catalog and the existing scoped local-order reader in the gateway. Matching requires both source permissions and reads all bounded continuation pages; the PWA only chooses a preview. No cloud dependency, new datastore or production workflow boundary is introduced. See [development scan preview](DEVELOPMENT_SCAN_PREVIEW.md).
 
 The Development station PWA now has a [read-only local-order view](STATION_LOCAL_ORDERS_UI.md) over the gateway's generated summary client. It does not call cloud order APIs, select/start orders or persist an additional browser order cache. The existing source authorization and opt-in endpoint boundary remain unchanged.

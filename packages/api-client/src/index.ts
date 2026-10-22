@@ -26,3 +26,4 @@ export type LocalOrderPage = components["schemas"]["LocalOrderPage"];
 export type DevelopmentItemLookupRequest = components["schemas"]["DevelopmentItemLookupRequest"];
 export type DevelopmentItemLookupResult = components["schemas"]["DevelopmentItemLookupResult"];
 export type DevelopmentScanPreviewResult = components["schemas"]["DevelopmentScanPreviewResult"];
+export type OperatorIdentityProof = components["schemas"]["OperatorIdentityProof"];

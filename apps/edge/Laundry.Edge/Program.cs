@@ -62,7 +62,12 @@ builder.Services.AddDbContext<PlantDbContext>(options =>
 builder.Services.AddHealthChecks()
     .AddCheck<PlantDatabaseHealthCheck>("plant-postgres", tags: ["ready"], timeout: TimeSpan.FromSeconds(5));
 
+builder.Services.AddDevelopmentOperatorIdentity(builder.Configuration, builder.Environment);
 var app = builder.Build();
+
+app.UseDevelopmentOperatorBoundary();
+if (OperatorAuthentication.Enabled(app.Configuration, app.Environment)) app.UseAuthentication();
+app.MapDevelopmentOperatorIdentity();
 
 app.UseStationApplication();
 

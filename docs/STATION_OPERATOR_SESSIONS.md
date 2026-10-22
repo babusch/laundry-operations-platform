@@ -1,6 +1,8 @@
 # Station operator sessions and inactivity lock
 
-Status: initial behavior and password-based unlocking approved; technical authentication/offline design and implementation remain pending.
+Status: initial behavior/password unlocking approved; identity-only development backend implemented and real login/status/local sign-out verified by the user 2026-10-22. Full station-session/locking/unlock and production offline design remain pending.
+
+Implementation follow-up (2026-10-18): the user approved only the first identity-proof step. Separate gateway OIDC/cookie handlers, source-bound safe status, CSRF-protected local sign-out and bounded in-memory ticket invalidation are implemented and disabled by default. Its fixed 15-minute **test expiry** is not the inactivity lock or shift policy. No operational permission, PWA controls, station ownership, receiving or password unlock is implemented. See [guided setup and verification limits](STATION_OPERATOR_IDENTITY_SETUP.md) and [ADR 0021](decisions/0021-development-station-operator-identity-proof.md). The proposed map below is retained as the scope/sequence for later steps, not a claim they are implemented.
 
 ## Approved behavior (2026-10-18)
 
@@ -73,6 +75,6 @@ The next proposed implementation is **only step 1**, not all three steps. A shor
 
 Design password verification and its offline behavior, including what happens if the station locks while the identity provider is unavailable. Review failed-attempt limits, session validity, handover and recovery before implementation. The 15-minute inactivity lock and offline continuity requirements must be reconciled explicitly; password selection alone does not solve offline unlock.
 
-Username/password through the existing Keycloak setup was proposed for initial development sign-in, not yet implemented for stations. Management login is not automatically an operator session or grant of scanning permission. Production session contracts, storage, audit events, settings, operator UI and tests follow separately after review.
+Username/password through a separate Keycloak client now has an implemented identity-only Development backend, pending live setup/verification. Management login is not automatically an operator session or grant of scanning permission. Production session contracts, storage, audit events, settings and operator UI follow separately after review.
 
-This is documentation only. The current synthetic preview/raw-observation infrastructure still does not authenticate operators or implement inactivity locking, receiving or dispatch.
+The synthetic preview/raw-observation infrastructure is unchanged and does not require the new identity proof. It still does not implement operator-authorized receiving/dispatch or inactivity locking. Do not interpret a successful identity-proof response as permission to count a scan.

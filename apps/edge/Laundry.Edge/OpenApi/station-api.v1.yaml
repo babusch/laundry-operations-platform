@@ -4,6 +4,89 @@ info:
   version: 1.0.0
   description: Development contract used to generate the station PWA client.
 paths:
+  /operator/login:
+    get:
+      operationId: beginOperatorIdentityProof
+      summary: Navigate to Development-only operator sign-in (not a fetch-based login)
+      description: >-
+        Opt-in Development loopback HTTPS localhost:7200 only. Requires active enrolled browser source.
+        No query parameters or return URL accepted. Uses separate operator-development code/PKCE client.
+        Framework callback /operator/signin-oidc is not a general application command.
+        Does not grant permissions, establish station ownership, unlock or start receiving.
+      security:
+        - sourceCookie: []
+      responses:
+        "302": { description: Redirect to the configured identity provider. }
+        "400": { description: Query parameters rejected. }
+        "401": { description: Valid enrolled browser source required. }
+        "403": { description: Transport/origin boundary rejected. }
+        "404": { description: Feature unavailable or not Development. }
+        "502": { description: Provider rejected client authentication; no fallback. }
+        "503": { description: Identity provider or source storage unavailable. }
+  /operator/session:
+    get:
+      operationId: getOperatorIdentityProof
+      summary: Read safe identity-only proof status; never operational authorization
+      description: >-
+        Development-only. Cookie proof is bound to current source/tenant/plant/station, fixed at
+        15 minutes without sliding renewal and invalidated by local sign-out or process restart.
+        No tokens, internal subjects, roles or source IDs are returned. No identity-provider call.
+        Responses use no-store, Vary Cookie and Referrer-Policy no-referrer.
+      security:
+        - sourceCookie: []
+          operatorProofCookie: []
+      responses:
+        "200":
+          description: Authenticated identity proof only; operationalAccessEnabled is always false.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperatorIdentityProof" }
+        "401": { description: Missing, expired, revoked or mismatched proof/source; no login redirect. }
+        "403": { description: Transport/origin boundary rejected. }
+        "404": { description: Feature unavailable or not Development. }
+        "503": { description: Source storage unavailable; not anonymous success. }
+  /operator/antiforgery:
+    get:
+      operationId: getOperatorIdentityAntiforgery
+      summary: Issue a CSRF token bound to the operator identity proof
+      security:
+        - sourceCookie: []
+          operatorProofCookie: []
+      responses:
+        "200":
+          description: Fresh request token; no-store. Does not renew the proof.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [headerName, requestToken]
+                properties:
+                  headerName: { type: string, const: X-Laundry-CSRF }
+                  requestToken: { type: string, minLength: 1 }
+        "401": { description: Valid proof and enrolled source required. }
+        "403": { description: Transport/origin boundary rejected. }
+        "404": { description: Feature unavailable or not Development. }
+        "503": { description: Source storage unavailable. }
+  /operator/logout:
+    post:
+      operationId: signOutOperatorIdentityProof
+      summary: Remove this browser proof's server ticket and cookie locally
+      description: >-
+        Development-only, no-store. Requires CSRF issued by /operator/antiforgery, not an anonymous
+        source-session token. No Keycloak call, provider-wide logout, source revocation or order change.
+        Other tabs sharing this proof lose it on their next request; separate browser proofs are not a station session.
+      security:
+        - sourceCookie: []
+          operatorProofCookie: []
+          antiforgeryHeader: []
+      responses:
+        "204": { description: Server ticket removed and cookie cleared. }
+        "400": { description: Missing or invalid operator-bound antiforgery token. }
+        "401": { description: Valid proof and enrolled source required. }
+        "403": { description: Transport/origin boundary rejected. }
+        "404": { description: Feature unavailable or not Development. }
+        "503": { description: Source storage unavailable. }
   /api/development/scan-preview:
     post:
       operationId: previewDevelopmentScan
@@ -331,6 +414,11 @@ paths:
           $ref: "#/components/responses/Problem"
 components:
   securitySchemes:
+    operatorProofCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-laundry-operator-proof
+      description: Opaque Development identity-proof ticket; no operational permission.
     sourceCookie:
       type: apiKey
       in: cookie
@@ -342,6 +430,15 @@ components:
       name: X-Laundry-CSRF
       description: Antiforgery token obtained from the authenticated source session.
   schemas:
+    OperatorIdentityProof:
+      type: object
+      additionalProperties: false
+      required: [authenticated, displayName, expiresAtUtc, operationalAccessEnabled]
+      properties:
+        authenticated: { type: boolean, const: true }
+        displayName: { type: [string, "null"], minLength: 1, maxLength: 200 }
+        expiresAtUtc: { type: string, format: date-time }
+        operationalAccessEnabled: { type: boolean, const: false }
     DevelopmentScanPreviewResult:
       type: object
       additionalProperties: false

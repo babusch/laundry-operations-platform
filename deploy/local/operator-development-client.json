@@ -1,0 +1,20 @@
+{
+  "clientId": "operator-development",
+  "name": "Laundry station operator development identity proof",
+  "description": "Manual client import; no operational permissions, grants or service account",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "clientAuthenticatorType": "client-secret",
+  "publicClient": false,
+  "bearerOnly": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "fullScopeAllowed": false,
+  "redirectUris": ["https://localhost:7200/operator/signin-oidc"],
+  "webOrigins": [],
+  "defaultClientScopes": [],
+  "optionalClientScopes": ["profile"],
+  "attributes": { "pkce.code.challenge.method": "S256" }
+}
